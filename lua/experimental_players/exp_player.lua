@@ -107,6 +107,22 @@ function EXP:InitializeBot( ply, glace )
     ply.exp_Enemy = nil
     ply.exp_LastSeenEnemy = 0
 
+    -- Create weapon entity
+    if glace.CreateWeaponEntity then
+        glace:CreateWeaponEntity()
+    end
+
+    -- Equip random weapon
+    local randomWeapon = self:GetRandomWeapon( true, false, false )  -- Lethal weapons only
+    if glace.SwitchWeapon and randomWeapon then
+        timer.Simple( 0.5, function()
+            if IsValid( ply ) then
+                glace:SwitchWeapon( randomWeapon, true )
+                print( "[Experimental Players] " .. ply:Nick() .. " equipped " .. randomWeapon )
+            end
+        end )
+    end
+
     print( "[Experimental Players] Bot initialized: " .. ply:Nick() )
 end
 
@@ -183,8 +199,54 @@ function PLAYER:State_Combat()
         return
     end
 
-    -- TODO: Implement combat logic
-    coroutine_wait( 0.5 )
+    local enemy = self.exp_Enemy
+    local dist = self:GetPos():Distance( enemy:GetPos() )
+
+    -- Get weapon data
+    local weaponData = self:GetCurrentWeaponData()
+    if !weaponData then
+        -- No weapon, try to find one
+        if self.SwitchWeapon then
+            local randomWeapon = EXP:GetRandomWeapon( true, false, false )
+            self:SwitchWeapon( randomWeapon, true )
+        end
+        coroutine_wait( 1 )
+        return
+    end
+
+    local keepDist = self.exp_CombatKeepDistance or 200
+    local attackRange = self.exp_CombatAttackRange or 500
+
+    -- Move towards or away from enemy
+    if dist > attackRange then
+        -- Too far, move closer
+        if IsValid( self.Navigator ) then
+            self.Navigator:ComputePath( enemy:GetPos(), { tolerance = keepDist } )
+        end
+    elseif dist < keepDist * 0.5 then
+        -- Too close, back up
+        local awayPos = self:GetPos() - ( enemy:GetPos() - self:GetPos() ):GetNormalized() * 200
+        if IsValid( self.Navigator ) then
+            self.Navigator:ComputePath( awayPos, {} )
+        end
+    end
+
+    -- Aim at enemy
+    local aimDir = ( enemy:GetPos() + Vector( 0, 0, 40 ) - self:GetShootPos() ):GetNormalized()
+    local aimAng = aimDir:Angle()
+    self:SetEyeAngles( aimAng )
+
+    -- Attack if in range
+    if dist <= attackRange and self.Attack then
+        self:Attack( enemy )
+    end
+
+    -- Check if we need to reload
+    if self.CanReload and self:CanReload() and self:GetWeaponClip() <= 2 then
+        self:Reload()
+    end
+
+    coroutine_wait( 0.1 )
 end
 
 --[[ Hooks ]]--
