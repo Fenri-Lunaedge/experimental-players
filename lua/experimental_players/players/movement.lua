@@ -27,6 +27,12 @@ function PLAYER:InitializeMovement()
     self.exp_StuckPosition = self:GetPos()
     self.exp_StuckTimer = CurTime() + 3
     self.exp_IsStuck = false
+
+    -- Input control variables for StartCommand hook
+    self.exp_InputButtons = 0
+    self.exp_InputAngles = self:EyeAngles()
+    self.exp_InputForwardMove = 0
+    self.exp_InputSideMove = 0
 end
 
 --[[ Main Movement Function ]]--
@@ -156,22 +162,31 @@ function PLAYER:MoveTowards( pos )
     -- Smooth angle transition
     local newAng = LerpAngle( 0.1, myAng, targetAng )
     self:SetEyeAngles( newAng )
+    self.exp_InputAngles = newAng
 
-    -- Calculate movement input
-    local forward = dir:Dot( myAng:Forward() )
-    local right = dir:Dot( myAng:Right() )
+    -- Calculate movement input based on view direction
+    local forward = dir:Dot( newAng:Forward() )
+    local right = dir:Dot( newAng:Right() )
 
-    -- Set input keys
-    if forward > 0.5 then
-        self:SetButtonDown( IN_FORWARD )
-    elseif forward < -0.5 then
-        self:SetButtonDown( IN_BACK )
+    -- Set movement values (simpler and more direct than buttons)
+    local maxSpeed = 10000  -- GMod's max movement speed
+
+    -- Forward/back movement
+    if forward > 0.1 then
+        self.exp_InputForwardMove = maxSpeed * forward
+    elseif forward < -0.1 then
+        self.exp_InputForwardMove = maxSpeed * forward
+    else
+        self.exp_InputForwardMove = 0
     end
 
-    if right > 0.5 then
-        self:SetButtonDown( IN_MOVERIGHT )
-    elseif right < -0.5 then
-        self:SetButtonDown( IN_MOVELEFT )
+    -- Left/right movement
+    if right > 0.1 then
+        self.exp_InputSideMove = maxSpeed * right
+    elseif right < -0.1 then
+        self.exp_InputSideMove = maxSpeed * right
+    else
+        self.exp_InputSideMove = 0
     end
 
     -- Sprint
@@ -186,22 +201,23 @@ function PLAYER:MoveTowards( pos )
 end
 
 function PLAYER:StopMoving()
-    -- Clear all movement buttons
-    self:SetButtonUp( IN_FORWARD )
-    self:SetButtonUp( IN_BACK )
-    self:SetButtonUp( IN_MOVELEFT )
-    self:SetButtonUp( IN_MOVERIGHT )
-    self:SetButtonUp( IN_SPEED )
-    self:SetButtonUp( IN_DUCK )
-    self:SetButtonUp( IN_JUMP )
+    -- Clear all movement
+    self:ClearButtons()
+    self.exp_IsMoving = false
 end
 
 function PLAYER:SetButtonDown( key )
-    self:SetButton( bit.bor( self:GetButtons(), key ) )
+    self.exp_InputButtons = bit.bor( self.exp_InputButtons or 0, key )
 end
 
 function PLAYER:SetButtonUp( key )
-    self:SetButton( bit.band( self:GetButtons(), bit.bnot( key ) ) )
+    self.exp_InputButtons = bit.band( self.exp_InputButtons or 0, bit.bnot( key ) )
+end
+
+function PLAYER:ClearButtons()
+    self.exp_InputButtons = 0
+    self.exp_InputForwardMove = 0
+    self.exp_InputSideMove = 0
 end
 
 --[[ Locomotion ]]--

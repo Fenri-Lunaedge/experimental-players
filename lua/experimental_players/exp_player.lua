@@ -185,9 +185,6 @@ function PLAYER:Think()
     -- Regular think function (called every tick)
     -- Handle immediate actions here
 
-    -- Clear buttons each frame (they will be re-set by movement system)
-    self:SetButton( 0 )
-
     -- Update navigator position
     if IsValid( self.Navigator ) then
         self.Navigator:SetPos( self:GetPos() )
@@ -358,6 +355,34 @@ hook.Add( "Think", "EXP_PlayerThink", function()
         if IsValid( bot._PLY ) then
             bot._PLY:Think()  -- Call Think on the player entity, not the GLACE wrapper
         end
+    end
+end )
+
+-- Control PlayerBot inputs via StartCommand
+hook.Add( "StartCommand", "EXP_PlayerBotInput", function( ply, cmd )
+    if !ply.exp_IsExperimentalPlayer then return end
+    if !IsValid( ply ) then return end
+
+    -- Clear buttons first
+    cmd:ClearButtons()
+    cmd:ClearMovement()
+
+    -- Apply stored buttons from movement system
+    if ply.exp_InputButtons then
+        cmd:SetButtons( ply.exp_InputButtons )
+    end
+
+    -- Apply view angles
+    if ply.exp_InputAngles then
+        cmd:SetViewAngles( ply.exp_InputAngles )
+    end
+
+    -- Apply movement (forward/side)
+    if ply.exp_InputForwardMove then
+        cmd:SetForwardMove( ply.exp_InputForwardMove )
+    end
+    if ply.exp_InputSideMove then
+        cmd:SetSideMove( ply.exp_InputSideMove )
     end
 end )
 
