@@ -26,6 +26,7 @@ if ( SERVER ) then
         self.pathAge = 0
         self.pathGoal = Vector( 0, 0, 0 )
         self.pathOptions = {}
+        self.currentSegment = 1
     end
 
     function ENT:ComputePath( goal, options )
@@ -34,19 +35,19 @@ if ( SERVER ) then
 
         -- Create path
         local path = Path( "Follow" )
-        if !path:IsValid() then return end
+        if !path:IsValid() then return false end
 
         path:SetMinLookAheadDistance( options.lookahead or 300 )
         path:SetGoalTolerance( options.tolerance or 20 )
 
         local result = path:Compute( self, goal, options.generator )
         if !result then
-            path = nil
             return false
         end
 
         self.path = path
         self.pathAge = 0
+        self.currentSegment = 1
         return true
     end
 
@@ -60,6 +61,20 @@ if ( SERVER ) then
 
     function ENT:InvalidatePath()
         self.path = nil
+        self.currentSegment = 1
+    end
+
+    function ENT:GetCurrentSegment()
+        return self.currentSegment
+    end
+
+    function ENT:AdvanceSegment()
+        self.currentSegment = self.currentSegment + 1
+    end
+
+    function ENT:RecomputePath()
+        if !self.pathGoal then return false end
+        return self:ComputePath( self.pathGoal, self.pathOptions )
     end
 
     function ENT:RunBehaviour()

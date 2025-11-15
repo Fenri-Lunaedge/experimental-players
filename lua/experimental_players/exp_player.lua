@@ -112,6 +112,11 @@ function EXP:InitializeBot( ply, glace )
         glace:CreateWeaponEntity()
     end
 
+    -- Initialize movement system
+    if glace.InitializeMovement then
+        glace:InitializeMovement()
+    end
+
     -- Equip random weapon
     local randomWeapon = self:GetRandomWeapon( true, false, false )  -- Lethal weapons only
     if glace.SwitchWeapon and randomWeapon then
@@ -183,12 +188,23 @@ function PLAYER:State_Wander()
     -- Wander state - move to random position
     local randomPos = self:GetPos() + Vector( math.random( -500, 500 ), math.random( -500, 500 ), 0 )
 
-    if IsValid( self.Navigator ) then
-        self.Navigator:ComputePath( randomPos, {} )
+    -- Use movement system
+    if self.MoveToPos then
+        local result = self:MoveToPos( randomPos, {
+            tolerance = 50,
+            sprint = false,
+            maxage = 10
+        } )
+
+        if result == "ok" then
+            -- Reached destination, wait a bit
+            coroutine_wait( math.random( 2, 4 ) )
+        end
+    else
+        -- Fallback
+        coroutine_wait( math.random( 5, 10 ) )
     end
 
-    -- Wait a bit, then go idle
-    coroutine_wait( math.random( 5, 10 ) )
     self:SetState( "Idle" )
 end
 
@@ -220,14 +236,19 @@ function PLAYER:State_Combat()
     -- Move towards or away from enemy
     if dist > attackRange then
         -- Too far, move closer
-        if IsValid( self.Navigator ) then
-            self.Navigator:ComputePath( enemy:GetPos(), { tolerance = keepDist } )
+        if self.MoveTowards then
+            self:MoveTowards( enemy:GetPos() )
         end
     elseif dist < keepDist * 0.5 then
         -- Too close, back up
         local awayPos = self:GetPos() - ( enemy:GetPos() - self:GetPos() ):GetNormalized() * 200
-        if IsValid( self.Navigator ) then
-            self.Navigator:ComputePath( awayPos, {} )
+        if self.MoveTowards then
+            self:MoveTowards( awayPos )
+        end
+    else
+        -- At good distance, stop moving
+        if self.StopMoving then
+            self:StopMoving()
         end
     end
 
