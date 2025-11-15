@@ -244,11 +244,17 @@ end
 function PLAYER:SetState( newState )
     self.exp_State = newState
     self.exp_StateTime = CurTime()
+
+    -- Set state-specific durations
+    if newState == "Idle" then
+        self.exp_IdleDuration = math.random( 2, 5 )
+    end
 end
 
 function PLAYER:State_Idle()
     -- Idle state - do nothing for a bit, then wander
-    if CurTime() > self.exp_StateTime + math.random( 2, 5 ) then
+    local idleDuration = self.exp_IdleDuration or 3
+    if CurTime() > self.exp_StateTime + idleDuration then
         self:SetState( "Wander" )
     end
     CoroutineWait( self, 1 )
