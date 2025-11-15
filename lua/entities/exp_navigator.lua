@@ -35,7 +35,6 @@ if ( SERVER ) then
 
         -- Create path
         local path = Path( "Follow" )
-        if !path:IsValid() then return false end
 
         path:SetMinLookAheadDistance( options.lookahead or 300 )
         path:SetGoalTolerance( options.tolerance or 20 )
