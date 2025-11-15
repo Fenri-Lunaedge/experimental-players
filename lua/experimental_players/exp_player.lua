@@ -125,44 +125,44 @@ function EXP:InitializeBot( ply, glace )
         end
     end
 
-    -- Create weapon entity
-    if glace.CreateWeaponEntity then
-        glace:CreateWeaponEntity()
+    -- Create weapon entity (call on ply, not glace)
+    if ply.CreateWeaponEntity then
+        ply:CreateWeaponEntity()
     end
 
     -- Initialize movement system
-    if glace.InitializeMovement then
-        glace:InitializeMovement()
+    if ply.InitializeMovement then
+        ply:InitializeMovement()
     end
 
     -- Initialize social systems
-    if glace.InitializeTextChat then
-        glace:InitializeTextChat()
+    if ply.InitializeTextChat then
+        ply:InitializeTextChat()
     end
 
-    if glace.InitializeVoice then
-        glace:InitializeVoice()
+    if ply.InitializeVoice then
+        ply:InitializeVoice()
     end
 
     -- Initialize building
-    if glace.InitializeBuilding then
-        glace:InitializeBuilding()
+    if ply.InitializeBuilding then
+        ply:InitializeBuilding()
     end
 
     -- Initialize admin
-    if glace.InitializeAdmin then
+    if ply.InitializeAdmin then
         local strictnessMin = self:GetConVar( "admin_strictnessmin" ) or 30
         local strictnessMax = self:GetConVar( "admin_strictnessmax" ) or 70
         local strictness = math.random( strictnessMin, strictnessMax )
-        glace:InitializeAdmin( isAdmin, strictness )
+        ply:InitializeAdmin( isAdmin, strictness )
     end
 
     -- Equip random weapon
     local randomWeapon = self:GetRandomWeapon( true, false, false )  -- Lethal weapons only
-    if glace.SwitchWeapon and randomWeapon then
+    if ply.SwitchWeapon and randomWeapon then
         timer.Simple( 0.5, function()
             if IsValid( ply ) then
-                glace:SwitchWeapon( randomWeapon, true )
+                ply:SwitchWeapon( randomWeapon, true )
                 print( "[Experimental Players] " .. ply:Nick() .. " equipped " .. randomWeapon )
             end
         end )
