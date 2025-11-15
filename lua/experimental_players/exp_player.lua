@@ -84,10 +84,17 @@ end
 
 function EXP:InitializeBot( ply, glace )
     -- Set random model
+    local model = nil
     if self.GetRandomPlayerModel then
-        local model = self:GetRandomPlayerModel()
-        ply:SetModel( model )
+        model = self:GetRandomPlayerModel()
     end
+
+    -- Fallback to default model if nil
+    if !model or model == "" then
+        model = "models/player/group01/male_0" .. math.random(1,9) .. ".mdl"
+    end
+
+    ply:SetModel( model )
 
     -- Set random colors
     local plyColor = Vector( math.Rand( 0, 1 ), math.Rand( 0, 1 ), math.Rand( 0, 1 ) )

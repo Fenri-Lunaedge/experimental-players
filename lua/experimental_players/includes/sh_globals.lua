@@ -153,12 +153,24 @@ if ( SERVER ) then
 
     function EXP:GetRandomPlayerModel()
         local mdlTbl = self.PlayerModels
+        if !mdlTbl or !mdlTbl.Default then
+            -- Fallback if PlayerModels not initialized
+            return "models/player/group01/male_0" .. math.random(1,9) .. ".mdl"
+        end
+
         local mdlList = mdlTbl.Default
 
         local defCount = #mdlList
+        if defCount == 0 then
+            -- No models in list, use fallback
+            return "models/player/group01/male_0" .. math.random(1,9) .. ".mdl"
+        end
+
         local mdlCount = defCount
-        if self:GetConVar( "player_addonplymdls" ) then
-            if self:GetConVar( "player_onlyaddonpms" ) then
+        local useConVar = self.GetConVar and self:GetConVar( "player_addonplymdls" )
+        if useConVar and useConVar == 1 then
+            local onlyAddons = self:GetConVar( "player_onlyaddonpms" )
+            if onlyAddons and onlyAddons == 1 then
                 mdlList = mdlTbl.Addons
                 if #mdlList != 0 then return EXP:Random( mdlList ) end
             end
@@ -172,7 +184,14 @@ if ( SERVER ) then
             mdlList = mdlTbl.Addons
         end
 
-        return mdlList[ mdlIndex ]
+        local selectedModel = mdlList[ mdlIndex ]
+
+        -- Safety check
+        if !selectedModel or selectedModel == "" then
+            return mdlTbl.Default[ 1 ] or "models/player/group01/male_01.mdl"
+        end
+
+        return selectedModel
     end
 
 end
