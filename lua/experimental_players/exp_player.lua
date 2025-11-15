@@ -107,6 +107,15 @@ function EXP:InitializeBot( ply, glace )
     ply.exp_Enemy = nil
     ply.exp_LastSeenEnemy = 0
 
+    -- Admin properties (check if should spawn as admin)
+    local isAdmin = false
+    if self:GetConVar( "admin_enabled" ) == 1 then
+        local spawnChance = self:GetConVar( "admin_spawnchance" ) or 10
+        if math.random( 1, 100 ) <= spawnChance then
+            isAdmin = true
+        end
+    end
+
     -- Create weapon entity
     if glace.CreateWeaponEntity then
         glace:CreateWeaponEntity()
@@ -129,6 +138,14 @@ function EXP:InitializeBot( ply, glace )
     -- Initialize building
     if glace.InitializeBuilding then
         glace:InitializeBuilding()
+    end
+
+    -- Initialize admin
+    if glace.InitializeAdmin then
+        local strictnessMin = self:GetConVar( "admin_strictnessmin" ) or 30
+        local strictnessMax = self:GetConVar( "admin_strictnessmax" ) or 70
+        local strictness = math.random( strictnessMin, strictnessMax )
+        glace:InitializeAdmin( isAdmin, strictness )
     end
 
     -- Equip random weapon
@@ -192,6 +209,13 @@ function PLAYER:ThreadedThink()
             self:State_Wander()
         elseif state == "Combat" then
             self:State_Combat()
+        elseif state == "AdminDuty" then
+            self:State_AdminDuty()
+        elseif state == "UsingCommand" then
+            self:State_UsingCommand()
+        elseif state == "Jailed" then
+            -- Being held by admin, do nothing
+            coroutine_wait( 1 )
         end
 
         coroutine_wait( 0.1 )

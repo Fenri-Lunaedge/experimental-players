@@ -127,6 +127,43 @@ EXP:CreateConVar( "building_caneditothers", 0, "Allow bots to edit other players
     category = "Building"
 } )
 
+-- Admin Settings
+EXP:CreateConVar( "admin_enabled", 1, "Enable admin bot system", {
+    name = "Admin Enabled",
+    category = "Admin"
+} )
+
+EXP:CreateConVar( "admin_spawnchance", 10, "Chance for a bot to spawn as admin (0-100)", {
+    name = "Admin Spawn Chance",
+    category = "Admin",
+    min = 0,
+    max = 100
+} )
+
+EXP:CreateConVar( "admin_strictnessmin", 30, "Minimum strictness for admin bots", {
+    name = "Min Strictness",
+    category = "Admin",
+    min = 0,
+    max = 100
+} )
+
+EXP:CreateConVar( "admin_strictnessmax", 70, "Maximum strictness for admin bots", {
+    name = "Max Strictness",
+    category = "Admin",
+    min = 0,
+    max = 100
+} )
+
+EXP:CreateConVar( "admin_detectrdm", 1, "Allow admins to detect RDM", {
+    name = "Detect RDM",
+    category = "Admin"
+} )
+
+EXP:CreateConVar( "admin_detectpropkill", 1, "Allow admins to detect prop killing", {
+    name = "Detect Prop Kills",
+    category = "Admin"
+} )
+
 -- Utility
 EXP:CreateConVar( "util_mergelambdafiles", 1, "Merge Lambda Players files (for compatibility)", {
     name = "Merge Lambda Files",
