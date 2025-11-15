@@ -8,8 +8,16 @@ local ents_Create = ents.Create
 local coroutine_create = coroutine.create
 local coroutine_resume = coroutine.resume
 local coroutine_yield = coroutine.yield
-local coroutine_wait = coroutine.wait
+local CurTime = CurTime
 local table_Merge = table.Merge
+
+-- Coroutine wait implementation for GMod
+local function CoroutineWait(self, seconds)
+    self.exp_CoroutineWaitUntil = CurTime() + seconds
+    while CurTime() < self.exp_CoroutineWaitUntil do
+        coroutine_yield()
+    end
+end
 
 --[[ Player Bot Class ]]--
 
@@ -224,10 +232,10 @@ function PLAYER:ThreadedThink()
             self:State_UsingCommand()
         elseif state == "Jailed" then
             -- Being held by admin, do nothing
-            coroutine_wait( 1 )
+            CoroutineWait( self, 1 )
         end
 
-        coroutine_wait( 0.1 )
+        CoroutineWait( self, 0.1 )
     end
 end
 
@@ -243,7 +251,7 @@ function PLAYER:State_Idle()
     if CurTime() > self.exp_StateTime + math.random( 2, 5 ) then
         self:SetState( "Wander" )
     end
-    coroutine_wait( 1 )
+    CoroutineWait( self, 1 )
 end
 
 function PLAYER:State_Wander()
@@ -260,11 +268,11 @@ function PLAYER:State_Wander()
 
         if result == "ok" then
             -- Reached destination, wait a bit
-            coroutine_wait( math.random( 2, 4 ) )
+            CoroutineWait( self, math.random( 2, 4 ) )
         end
     else
         -- Fallback
-        coroutine_wait( math.random( 5, 10 ) )
+        CoroutineWait( self, math.random( 5, 10 ) )
     end
 
     self:SetState( "Idle" )
@@ -288,7 +296,7 @@ function PLAYER:State_Combat()
             local randomWeapon = EXP:GetRandomWeapon( true, false, false )
             self:SwitchWeapon( randomWeapon, true )
         end
-        coroutine_wait( 1 )
+        CoroutineWait( self, 1 )
         return
     end
 
@@ -329,7 +337,7 @@ function PLAYER:State_Combat()
         self:Reload()
     end
 
-    coroutine_wait( 0.1 )
+    CoroutineWait( self, 0.1 )
 end
 
 --[[ Hooks ]]--
