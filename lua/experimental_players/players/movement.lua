@@ -117,23 +117,42 @@ function PLAYER:UpdateOnPath()
         return
     end
 
-    -- Get current path segment
-    local curSegment = path:GetCurrentGoal()
-    if !curSegment then
+    -- Get all segments and current segment index
+    local curSegIndex = self.Navigator:GetCurrentSegment()
+    local allSegs = path:GetAllSegments()
+    local segment = allSegs[ curSegIndex ]
+
+    if !segment then
         -- Reached end of path
         self.exp_IsMoving = false
         self.Navigator:InvalidatePath()
         return
     end
 
-    local goalPos = curSegment.pos
+    local goalPos = segment.pos
     local myPos = self:GetPos()
 
-    -- Check if we reached this segment
-    local dist = myPos:Distance( goalPos )
+    -- Check if we reached this segment (use XY distance only)
+    local xypos = goalPos * 1
+    xypos.z = 0
+    local selfpos = myPos * 1
+    selfpos.z = 0
+
+    local dist = selfpos:Distance( xypos )
     if dist <= self.exp_GoalTolerance then
-        path:Advance()
-        return
+        -- Reached segment, go to next one
+        if curSegIndex == #allSegs then
+            -- Reached final destination!
+            self.exp_IsMoving = false
+            self.Navigator:InvalidatePath()
+            self.exp_FollowPath_Pos = nil
+            return
+        end
+
+        -- Advance to next segment
+        self.Navigator:IncrementSegment()
+        segment = allSegs[ self.Navigator:GetCurrentSegment() ]
+        goalPos = segment.pos
     end
 
     -- Set target position for SetupMove hook (GLambda method!)
@@ -145,12 +164,12 @@ function PLAYER:UpdateOnPath()
     self.exp_LookTowards_EndT = CurTime() + 0.2
 
     -- Handle jumping
-    if curSegment.type == PATH_JUMP_OVER_GAP then
+    if segment.type == PATH_JUMP_OVER_GAP then
         self:PressKey( IN_JUMP )
     end
 
     -- Handle crouching
-    if curSegment.type == PATH_CLIMB_UP or dist < 100 then
+    if segment.type == PATH_CLIMB_UP then
         self.exp_MoveCrouch = true
     else
         self.exp_MoveCrouch = false

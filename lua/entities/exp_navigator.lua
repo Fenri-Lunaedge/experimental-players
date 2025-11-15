@@ -58,6 +58,16 @@ if ( SERVER ) then
         return self.path and self.path:IsValid()
     end
 
+    function ENT:IncrementSegment()
+        if self.currentSegment then
+            self.currentSegment = self.currentSegment + 1
+        end
+    end
+
+    function ENT:GetCurrentSegment()
+        return self.currentSegment or 1
+    end
+
     function ENT:InvalidatePath()
         self.path = nil
         self.currentSegment = 1
