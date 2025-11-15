@@ -43,10 +43,10 @@ function EXP:CreateLambdaPlayer( name, profile )
     local GLACE = { _PLY = ply }
     setmetatable( GLACE, {
         __index = function( tbl, key )
-            -- Check if it's a player method
-            if PLAYER[ key ] then
+            -- Check if it's a player method (use EXP.Player directly, not local PLAYER)
+            if EXP.Player[ key ] then
                 return function( self, ... )
-                    return PLAYER[ key ]( ply, ... )
+                    return EXP.Player[ key ]( ply, ... )
                 end
             end
             -- Otherwise return player property
