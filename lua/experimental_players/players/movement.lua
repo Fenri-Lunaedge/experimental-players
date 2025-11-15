@@ -54,6 +54,10 @@ function PLAYER:MoveToPos( pos, options )
     self.exp_IsMoving = true
     self.exp_MovementGoal = pos
 
+    -- Reset stuck detection for this movement
+    self.exp_StuckPosition = self:GetPos()
+    self.exp_StuckTimer = CurTime() + 3
+
     -- Determine if we should sprint
     local dist = self:GetPos():Distance( pos )
     local shouldSprint = options.sprint
@@ -95,9 +99,17 @@ function PLAYER:MoveToPos( pos, options )
         -- Update movement
         self:UpdateOnPath()
 
+        -- DEBUG: Check if path is still valid after UpdateOnPath
+        if !self.Navigator:IsPathValid() then
+            print("[EXP] Path became invalid after UpdateOnPath!")
+            pathResult = "path_invalid"
+            break
+        end
+
         coroutine_yield()
     end
 
+    print("[EXP] MoveToPos exited with result:", pathResult)
     self.exp_IsMoving = false
     self.exp_MoveSprint = false
     return pathResult
