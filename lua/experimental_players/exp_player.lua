@@ -339,7 +339,7 @@ hook.Add( "Think", "EXP_PlayerThink", function()
 
     for _, bot in ipairs( EXP.ActiveBots ) do
         if IsValid( bot._PLY ) then
-            bot:Think()
+            bot._PLY:Think()  -- Call Think on the player entity, not the GLACE wrapper
         end
     end
 end )
