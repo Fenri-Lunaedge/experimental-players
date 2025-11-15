@@ -33,6 +33,7 @@ EXP = EXPERIMENTAL_PLAYERS -- Shorthand alias
 -- Network strings
 if ( SERVER ) then
     util.AddNetworkString( "exp_reloadfiles" )
+    util.AddNetworkString( "exp_updatedata" )
 end
 
 --
