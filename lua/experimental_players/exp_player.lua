@@ -39,17 +39,19 @@ function EXP:CreateLambdaPlayer( name, profile )
     ply.exp_IsExperimentalPlayer = true
     ply.exp_Profile = profile
 
+    -- Copy all PLAYER methods to the player entity directly
+    -- This allows methods to be called from within coroutines
+    for methodName, methodFunc in pairs( EXP.Player ) do
+        if type( methodFunc ) == "function" then
+            ply[ methodName ] = methodFunc
+        end
+    end
+
     -- Create GLACE wrapper (GLambda's abstraction layer)
     local GLACE = { _PLY = ply }
     setmetatable( GLACE, {
         __index = function( tbl, key )
-            -- Check if it's a player method (use EXP.Player directly, not local PLAYER)
-            if EXP.Player[ key ] then
-                return function( self, ... )
-                    return EXP.Player[ key ]( ply, ... )
-                end
-            end
-            -- Otherwise return player property
+            -- Return player property/method directly
             return ply[ key ]
         end,
         __newindex = function( tbl, key, value )
