@@ -117,6 +117,16 @@ EXP:CreateConVar( "building_maxprops", 10, "Maximum props per bot", {
     max = 50
 } )
 
+EXP:CreateConVar( "building_caneditworld", 0, "Allow bots to edit map entities", {
+    name = "Can Edit World",
+    category = "Building"
+} )
+
+EXP:CreateConVar( "building_caneditothers", 0, "Allow bots to edit other players' entities", {
+    name = "Can Edit Others",
+    category = "Building"
+} )
+
 -- Utility
 EXP:CreateConVar( "util_mergelambdafiles", 1, "Merge Lambda Players files (for compatibility)", {
     name = "Merge Lambda Files",

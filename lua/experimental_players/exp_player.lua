@@ -117,6 +117,20 @@ function EXP:InitializeBot( ply, glace )
         glace:InitializeMovement()
     end
 
+    -- Initialize social systems
+    if glace.InitializeTextChat then
+        glace:InitializeTextChat()
+    end
+
+    if glace.InitializeVoice then
+        glace:InitializeVoice()
+    end
+
+    -- Initialize building
+    if glace.InitializeBuilding then
+        glace:InitializeBuilding()
+    end
+
     -- Equip random weapon
     local randomWeapon = self:GetRandomWeapon( true, false, false )  -- Lethal weapons only
     if glace.SwitchWeapon and randomWeapon then
@@ -140,6 +154,21 @@ function PLAYER:Think()
     -- Update navigator position
     if IsValid( self.Navigator ) then
         self.Navigator:SetPos( self:GetPos() )
+    end
+
+    -- Text chat think
+    if self.Think_TextChat then
+        self:Think_TextChat()
+    end
+
+    -- Voice think
+    if self.Think_Voice then
+        self:Think_Voice()
+    end
+
+    -- Building think
+    if self.Think_Building then
+        self:Think_Building()
     end
 
     -- Resume threaded think
