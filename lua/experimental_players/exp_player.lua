@@ -74,9 +74,9 @@ function EXP:CreateLambdaPlayer( name, profile )
     end )
     GLACE._Thread = thread
 
-    -- Add to bot list
-    table.insert( self.ActiveBots or {}, GLACE )
+    -- Add to bot list (initialize first!)
     self.ActiveBots = self.ActiveBots or {}
+    table.insert( self.ActiveBots, GLACE )
 
     print( "[Experimental Players] Created bot: " .. name )
     return GLACE
