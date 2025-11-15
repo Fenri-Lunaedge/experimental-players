@@ -72,9 +72,9 @@ function EXP:CreateLambdaPlayer( name, profile )
 
     -- Start thinking thread
     local thread = coroutine_create( function()
-        GLACE:ThreadedThink()
+        ply:ThreadedThink()
     end )
-    GLACE._Thread = thread
+    ply._Thread = thread
 
     -- Add to bot list (initialize first!)
     self.ActiveBots = self.ActiveBots or {}
