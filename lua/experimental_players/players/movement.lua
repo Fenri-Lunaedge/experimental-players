@@ -136,17 +136,25 @@ function PLAYER:UpdateOnPath()
         return
     end
 
-    -- Move towards goal
-    self:MoveTowards( goalPos )
+    -- Set target position for SetupMove hook (GLambda method!)
+    self.exp_FollowPath_Pos = goalPos
+    self.exp_FollowPath_EndT = CurTime() + 0.5
+
+    -- Look towards goal
+    self.exp_LookTowards_Pos = goalPos + Vector( 0, 0, 70 )
+    self.exp_LookTowards_EndT = CurTime() + 0.2
 
     -- Handle jumping
     if curSegment.type == PATH_JUMP_OVER_GAP then
-        self:Jump()
+        self:PressKey( IN_JUMP )
     end
 
     -- Handle crouching
-    local needsCrouch = curSegment.type == PATH_CLIMB_UP or dist < 100
-    self:SetCrouch( needsCrouch )
+    if curSegment.type == PATH_CLIMB_UP or dist < 100 then
+        self.exp_MoveCrouch = true
+    else
+        self.exp_MoveCrouch = false
+    end
 end
 
 --[[ Input-based Movement ]]--
@@ -206,8 +214,16 @@ function PLAYER:StopMoving()
     self.exp_IsMoving = false
 end
 
-function PLAYER:SetButtonDown( key )
+function PLAYER:PressKey( key )
     self.exp_InputButtons = bit.bor( self.exp_InputButtons or 0, key )
+end
+
+function PLAYER:HoldKey( key )
+    self.exp_InputButtons = bit.bor( self.exp_InputButtons or 0, key )
+end
+
+function PLAYER:SetButtonDown( key )
+    self:PressKey( key )
 end
 
 function PLAYER:SetButtonUp( key )
@@ -216,8 +232,8 @@ end
 
 function PLAYER:ClearButtons()
     self.exp_InputButtons = 0
-    self.exp_InputForwardMove = 0
-    self.exp_InputSideMove = 0
+    self.exp_FollowPath_Pos = nil
+    self.exp_LookTowards_Pos = nil
 end
 
 --[[ Locomotion ]]--

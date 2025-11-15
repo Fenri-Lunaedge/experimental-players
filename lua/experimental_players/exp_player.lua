@@ -361,28 +361,45 @@ end )
 -- Control PlayerBot inputs via StartCommand
 hook.Add( "StartCommand", "EXP_PlayerBotInput", function( ply, cmd )
     if !ply.exp_IsExperimentalPlayer then return end
-    if !IsValid( ply ) then return end
+    if !IsValid( ply ) or !ply:Alive() then return end
 
-    -- Clear buttons first
-    cmd:ClearButtons()
-    cmd:ClearMovement()
-
-    -- Apply stored buttons from movement system
-    if ply.exp_InputButtons then
+    -- Apply stored buttons
+    if ply.exp_InputButtons and ply.exp_InputButtons > 0 then
         cmd:SetButtons( ply.exp_InputButtons )
+        ply.exp_InputButtons = 0  -- Clear after applying
+    end
+end )
+
+-- Control PlayerBot movement via SetupMove (THIS IS THE KEY!)
+hook.Add( "SetupMove", "EXP_PlayerBotMovement", function( ply, mv, cmd )
+    if !ply.exp_IsExperimentalPlayer then return end
+    if !IsValid( ply ) or !ply:Alive() then return end
+
+    -- Apply eye angle changes
+    if ply.exp_LookTowards_Pos then
+        local lookPos = ply.exp_LookTowards_Pos
+        if CurTime() > (ply.exp_LookTowards_EndT or 0) then
+            ply.exp_LookTowards_Pos = nil
+        else
+            local ang = ( lookPos - ply:EyePos() ):Angle()
+            ang.z = 0
+            ply:SetEyeAngles( LerpAngle( 0.1, ply:EyeAngles(), ang ) )
+        end
     end
 
-    -- Apply view angles
-    if ply.exp_InputAngles then
-        cmd:SetViewAngles( ply.exp_InputAngles )
-    end
+    -- Apply movement towards position (THIS IS HOW GLAMBDA DOES IT!)
+    if ply.exp_FollowPath_Pos then
+        local targetPos = ply.exp_FollowPath_Pos
+        if CurTime() > (ply.exp_FollowPath_EndT or 0) then
+            ply.exp_FollowPath_Pos = nil
+        else
+            -- Point movement direction towards target
+            mv:SetMoveAngles( ( targetPos - ply:GetPos() ):Angle() )
 
-    -- Apply movement (forward/side)
-    if ply.exp_InputForwardMove then
-        cmd:SetForwardMove( ply.exp_InputForwardMove )
-    end
-    if ply.exp_InputSideMove then
-        cmd:SetSideMove( ply.exp_InputSideMove )
+            -- Set movement speed
+            local speed = ply.exp_MoveSprint and ply:GetRunSpeed() or ply:GetWalkSpeed()
+            mv:SetForwardSpeed( speed )
+        end
     end
 end )
 
