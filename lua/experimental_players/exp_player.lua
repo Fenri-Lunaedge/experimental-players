@@ -185,6 +185,9 @@ function PLAYER:Think()
     -- Regular think function (called every tick)
     -- Handle immediate actions here
 
+    -- Clear buttons each frame (they will be re-set by movement system)
+    self:SetButton( 0 )
+
     -- Update navigator position
     if IsValid( self.Navigator ) then
         self.Navigator:SetPos( self:GetPos() )

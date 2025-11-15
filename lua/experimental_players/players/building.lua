@@ -248,12 +248,17 @@ end
 --[[ Automatic Building ]]--
 
 function PLAYER:ShouldBuild()
+    -- TEMPORARILY DISABLED - Causing issues during testing
+    return false
+
+    --[[ ORIGINAL CODE:
     if !EXP:GetConVar("building_enabled") then return false end
     if CurTime() < self.exp_NextBuildTime then return false end
     if self.exp_State != "Idle" and self.exp_State != "Wander" then return false end
     if math_random(1, 100) > 20 then return false end  -- 20% chance
 
     return true
+    ]]--
 end
 
 function PLAYER:Think_Building()
