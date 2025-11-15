@@ -1,0 +1,14 @@
+{
+	"title": "Experimental Players",
+	"type": "ServerContent",
+	"tags": [
+		"npc",
+		"fun",
+		"roleplay"
+	],
+	"ignore": [
+		"*.git*",
+		"*.md",
+		"*.txt"
+	]
+}

@@ -1,0 +1,28 @@
+# Garry's Mod specific
+*.cache
+*.txt.bz2
+*.gma
+
+# Windows
+Thumbs.db
+Desktop.ini
+
+# macOS
+.DS_Store
+._*
+
+# Linux
+*~
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Logs
+*.log
+
+# Temporary files
+*.tmp
+*.bak
