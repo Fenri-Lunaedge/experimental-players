@@ -30,6 +30,11 @@ end
 EXPERIMENTAL_PLAYERS = ( EXPERIMENTAL_PLAYERS or {} )
 EXP = EXPERIMENTAL_PLAYERS -- Shorthand alias
 
+-- Network strings
+if ( SERVER ) then
+    util.AddNetworkString( "exp_reloadfiles" )
+end
+
 --
 
 local initialized = false
@@ -61,7 +66,12 @@ function EXP:LoadFiles( caller )
 
     print( "[Experimental Players] Core files loaded" )
 
-    -- Player behavior modules
+    -- Load main player class FIRST (defines PLAYER table)
+    if ( SERVER ) then AddCSLuaFile( "experimental_players/exp_player.lua" ) end
+    include( "experimental_players/exp_player.lua" )
+    print( "[Experimental Players] Main player class loaded" )
+
+    -- Player behavior modules (need PLAYER to exist)
     local dirPath = "experimental_players/players/"
     for _, luaFile in ipairs( file_Find( dirPath .. "*.lua", "LUA", "nameasc" ) ) do
         if ( SERVER ) then
@@ -84,8 +94,17 @@ function EXP:LoadFiles( caller )
     end
 
     -- Game modes (CTF, KOTH, TDM)
+    -- Load base system first
     local dirPath = "experimental_players/gamemodes/"
+    if ( SERVER ) then
+        include( dirPath .. "sv_gamemode_base.lua" )
+        print( "[Experimental Players] Loaded Gamemode Base System" )
+    end
+
+    -- Then load individual gamemodes
     for _, luaFile in ipairs( file_Find( dirPath .. "*.lua", "LUA", "nameasc" ) ) do
+        if luaFile == "sv_gamemode_base.lua" then continue end  -- Already loaded
+
         if string_StartWith( luaFile, "sv_" ) then
             include( dirPath .. luaFile )
             print( "[Experimental Players] Loaded Gamemode: " .. luaFile )
@@ -93,6 +112,19 @@ function EXP:LoadFiles( caller )
             if ( SERVER ) then AddCSLuaFile( dirPath .. luaFile ) end
             include( dirPath .. luaFile )
             print( "[Experimental Players] Loaded Gamemode (Shared): " .. luaFile )
+        end
+    end
+
+    -- Admin system (needs PLAYER)
+    local dirPath = "experimental_players/admin/"
+    for _, luaFile in ipairs( file_Find( dirPath .. "*.lua", "LUA", "nameasc" ) ) do
+        if string_StartWith( luaFile, "sv_" ) then
+            include( dirPath .. luaFile )
+            print( "[Experimental Players] Loaded Admin Module: " .. luaFile )
+        elseif string_StartWith( luaFile, "sh_" ) then
+            if ( SERVER ) then AddCSLuaFile( dirPath .. luaFile ) end
+            include( dirPath .. luaFile )
+            print( "[Experimental Players] Loaded Admin Module (Shared): " .. luaFile )
         end
     end
 
@@ -110,10 +142,6 @@ function EXP:LoadFiles( caller )
     end
 
     print( "[Experimental Players] All extension modules loaded" )
-
-    -- The main player class
-    if ( SERVER ) then AddCSLuaFile( "experimental_players/exp_player.lua" ) end
-    include( "experimental_players/exp_player.lua" )
 
     if ( SERVER ) then
         if IsValid( caller ) then
