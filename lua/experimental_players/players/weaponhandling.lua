@@ -84,7 +84,11 @@ function PLAYER:SwitchWeapon( weaponName, forceSwitch )
 
     -- Check if we can switch
     if !forceSwitch and self.exp_NoWeaponSwitch then return false end
-    if self.exp_Weapon == weaponName then return false end  -- Already have it
+
+    -- FIX: If switching to same weapon, preserve ammo
+    if self.exp_Weapon == weaponName then
+        return false  -- Already have it, don't reset
+    end
 
     -- Cancel any pending auto-reload timer
     local timerName = "EXP_AutoReload_" .. self:EntIndex()
@@ -123,7 +127,25 @@ function PLAYER:SwitchWeapon( weaponName, forceSwitch )
     self.exp_CombatAttackRange = newData.attackrange or 100
     self.exp_WeaponNoDraw = newData.nodraw or false
     self.exp_WeaponSpeedMultiplier = newData.speedmultiplier or 1
-    self.exp_Clip = newData.clip or -1
+
+    -- FIX: Preserve ammo if switching back to same weapon type
+    -- Store ammo per weapon in a table
+    if !self.exp_WeaponAmmoStorage then
+        self.exp_WeaponAmmoStorage = {}
+    end
+
+    -- Save old weapon ammo
+    if oldWeapon and oldWeapon ~= "none" and self.exp_Clip then
+        self.exp_WeaponAmmoStorage[oldWeapon] = self.exp_Clip
+    end
+
+    -- Restore ammo if we've used this weapon before
+    if self.exp_WeaponAmmoStorage[weaponName] then
+        self.exp_Clip = self.exp_WeaponAmmoStorage[weaponName]
+    else
+        self.exp_Clip = newData.clip or -1
+    end
+
     self.exp_MaxClip = newData.clip or -1
     self.exp_WeaponUseCooldown = CurTime() + ( newData.deploydelay or 0.1 )
     self.exp_WeaponDropEntity = newData.dropentity
@@ -192,7 +214,11 @@ function PLAYER:Attack( target )
     if !self:CanAttack() then return false end
 
     local weaponData = EXP:GetWeaponData( self.exp_Weapon )
-    if !weaponData then return false end
+    if !weaponData then
+        -- FIX: Clear attack state when weapon data is invalid
+        self.exp_WeaponUseCooldown = CurTime() + 1  -- Prevent spam
+        return false
+    end
 
     local wepEnt = self:GetWeaponENT()
 
@@ -359,8 +385,9 @@ function PLAYER:AttackRanged( weaponData, wepEnt, target )
     -- Auto reload if empty
     if self.exp_Clip == 0 then
         local timerName = "EXP_AutoReload_" .. self:EntIndex()
+        local currentWeapon = weaponData.name  -- FIX: Capture weapon name to avoid race condition
         timer.Create( timerName, 0.5, 1, function()
-            if IsValid( self ) and self:Alive() and self.exp_Weapon == weaponData.name then
+            if IsValid( self ) and self:Alive() and self.exp_Weapon == currentWeapon then
                 self:Reload()
             end
         end )

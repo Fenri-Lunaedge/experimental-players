@@ -20,6 +20,12 @@ function PLAYER:FindNearbyCovers(radius, fromPos)
     radius = radius or 800
     fromPos = fromPos or self:GetPos()
 
+    -- FIX: Cache cover search to avoid expensive FindInSphere every frame
+    local now = CurTime()
+    if self.exp_CoverCacheTime and (now - self.exp_CoverCacheTime) < 2 then
+        return self.exp_CoverCache or {}
+    end
+
     local covers = {}
     local searchPos = fromPos
 
@@ -33,7 +39,8 @@ function PLAYER:FindNearbyCovers(radius, fromPos)
         -- Check if entity can provide cover
         if self:CanProvideCover(ent) then
             local coverData = self:EvaluateCover(ent, fromPos)
-            if coverData then
+            -- FIX: Only insert if coverData is valid (not nil)
+            if coverData and coverData.position then
                 table.insert(covers, coverData)
             end
         end
@@ -43,6 +50,10 @@ function PLAYER:FindNearbyCovers(radius, fromPos)
     table.sort(covers, function(a, b)
         return a.quality > b.quality
     end)
+
+    -- Cache results
+    self.exp_CoverCache = covers
+    self.exp_CoverCacheTime = now
 
     return covers
 end
@@ -292,6 +303,8 @@ function PLAYER:InitializeCoverSystem()
     self.exp_CoverTime = nil
     self.exp_NextPeekTime = 0
     self.exp_LastDamageTime = nil
+    self.exp_CoverCache = {}  -- FIX: Initialize cache
+    self.exp_CoverCacheTime = 0
 end
 
 -- Hook into damage to track when bot is under fire
