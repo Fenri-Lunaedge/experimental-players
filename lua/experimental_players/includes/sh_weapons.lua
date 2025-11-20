@@ -43,27 +43,58 @@ function EXP:ImportLambdaWeapons()
     end
 end
 
--- Try to import Lambda weapons when they're loaded
-hook.Add( "Initialize", "EXP_ImportLambdaWeapons", function()
-    timer.Simple( 1, function()
+-- Import Lambda weapons immediately after this file loads
+-- This runs synchronously, ensuring weapons are available before bots spawn
+if _LAMBDAPLAYERSWEAPONS then
+    EXP:ImportLambdaWeapons()
+else
+    -- If Lambda loads later, import when it does
+    hook.Add( "LambdaOnModulesLoaded", "EXP_ImportLambdaWeapons", function()
         EXP:ImportLambdaWeapons()
     end )
-end )
+end
 
 --[[ Weapon Utility Functions ]]--
 
 function EXP:WeaponExists( weaponName )
-    return _EXPERIMENTALPLAYERSWEAPONS[ weaponName ] != nil
+    return _EXPERIMENTALPLAYERSWEAPONS[ weaponName ]  ~=  nil
 end
 
 function EXP:GetWeaponData( weaponName )
     return _EXPERIMENTALPLAYERSWEAPONS[ weaponName ]
 end
 
-function EXP:GetRandomWeapon( lethalOnly, rangedOnly, meleeOnly )
-    local validWeapons = {}
+-- Helper: RandomPairs iterator (from GLambda)
+local function RandomPairs( tbl )
+    local keys = {}
+    for k in pairs( tbl ) do
+        table.insert( keys, k )
+    end
 
-    for weaponName, weaponData in pairs( _EXPERIMENTALPLAYERSWEAPONS ) do
+    -- Shuffle keys
+    for i = #keys, 2, -1 do
+        local j = math.random( i )
+        keys[ i ], keys[ j ] = keys[ j ], keys[ i ]
+    end
+
+    local i = 0
+    return function()
+        i = i + 1
+        if keys[ i ] then
+            return keys[ i ], tbl[ keys[ i ] ]
+        end
+    end
+end
+
+function EXP:GetRandomWeapon( lethalOnly, rangedOnly, meleeOnly )
+    -- Validate weapon table exists and has entries
+    if !_EXPERIMENTALPLAYERSWEAPONS or table.Count(_EXPERIMENTALPLAYERSWEAPONS) == 0 then
+        print("[Experimental Players] ERROR: Weapon table is empty! Weapons not loaded yet.")
+        return "none"
+    end
+
+    -- Use GLambda's approach: iterate randomly and return first match
+    for weaponName, weaponData in RandomPairs( _EXPERIMENTALPLAYERSWEAPONS ) do
         -- Skip if can't be selected
         if weaponData.cantbeselected then continue end
 
@@ -74,11 +105,13 @@ function EXP:GetRandomWeapon( lethalOnly, rangedOnly, meleeOnly )
         if rangedOnly and weaponData.ismelee then continue end
         if meleeOnly and !weaponData.ismelee then continue end
 
-        table.insert( validWeapons, weaponName )
+        -- Found a valid weapon!
+        return weaponName
     end
 
-    if #validWeapons == 0 then return "none" end
-    return self:Random( validWeapons )
+    -- No valid weapons found matching criteria
+    print("[Experimental Players] WARNING: No weapons match criteria (lethal=" .. tostring(lethalOnly) .. ", ranged=" .. tostring(rangedOnly) .. ", melee=" .. tostring(meleeOnly) .. ")")
+    return "none"
 end
 
 function EXP:GetWeaponsByOrigin( origin )

@@ -24,6 +24,13 @@ end
 EXP.Player = ( EXP.Player or {} )
 local PLAYER = EXP.Player
 
+-- Copy toolgun methods if they exist (loaded from toolgun.lua)
+if EXP.ToolgunPlayerMethods then
+	for k, v in pairs(EXP.ToolgunPlayerMethods) do
+		PLAYER[k] = v
+	end
+end
+
 --[[ Creation Function ]]--
 
 function EXP:CreateLambdaPlayer( name, profile )
@@ -126,8 +133,8 @@ function EXP:InitializeBot( ply, glace )
 
     -- Admin properties (check if should spawn as admin)
     local isAdmin = false
-    if self:GetConVar( "admin_enabled" ) == 1 then
-        local spawnChance = self:GetConVar( "admin_spawnchance" ) or 10
+    if EXP:GetConVar( "admin_enabled" ) == 1 then
+        local spawnChance = EXP:GetConVar( "admin_spawnchance" ) or 10
         if math.random( 1, 100 ) <= spawnChance then
             isAdmin = true
         end
@@ -141,6 +148,26 @@ function EXP:InitializeBot( ply, glace )
     -- Initialize movement system
     if ply.InitializeMovement then
         ply:InitializeMovement()
+    end
+
+    -- Initialize combat system
+    if ply.InitializeCombat then
+        ply:InitializeCombat()
+    end
+
+    -- Initialize objective system
+    if ply.InitializeObjective then
+        ply:InitializeObjective()
+    end
+
+    -- Initialize building system
+    if ply.InitializeBuilding then
+        ply:InitializeBuilding()
+    end
+
+    -- Initialize personality system (BEFORE social systems)
+    if ply.InitializePersonality then
+        ply:InitializePersonality()
     end
 
     -- Initialize social systems
@@ -159,21 +186,86 @@ function EXP:InitializeBot( ply, glace )
 
     -- Initialize admin
     if ply.InitializeAdmin then
-        local strictnessMin = self:GetConVar( "admin_strictnessmin" ) or 30
-        local strictnessMax = self:GetConVar( "admin_strictnessmax" ) or 70
+        local strictnessMin = EXP:GetConVar( "admin_strictnessmin" ) or 30
+        local strictnessMax = EXP:GetConVar( "admin_strictnessmax" ) or 70
         local strictness = math.random( strictnessMin, strictnessMax )
         ply:InitializeAdmin( isAdmin, strictness )
     end
 
-    -- Equip random weapon
-    local randomWeapon = self:GetRandomWeapon( true, false, false )  -- Lethal weapons only
-    if ply.SwitchWeapon and randomWeapon then
-        timer.Simple( 0.5, function()
-            if IsValid( ply ) then
-                ply:SwitchWeapon( randomWeapon, true )
-                print( "[Experimental Players] " .. ply:Nick() .. " equipped " .. randomWeapon )
+    -- Assign to team if gamemode is active
+    if self.GameMode and self.GameMode.Active then
+        -- Find team with fewest players
+        local smallestTeam = nil
+        local smallestCount = math.huge
+
+        for teamID, team in pairs(self.GameMode.Teams) do
+            local count = table.Count(team.players)
+            if count < smallestCount then
+                smallestCount = count
+                smallestTeam = teamID
             end
-        end )
+        end
+
+        -- Assign to team
+        if smallestTeam then
+            EXP:AssignPlayerToTeam(ply, smallestTeam)
+        end
+    end
+
+    -- Equip weapon based on personality preferences
+    local randomWeapon = nil
+
+    if ply.GetPersonalityData then
+        local personalityData = ply:GetPersonalityData()
+        if personalityData and personalityData.weaponPreference then
+            -- Try to select weapon based on personality preferences
+            local weaponTypes = {"melee", "shotgun", "smg", "sniper"}
+
+            -- Sort by preference (highest first)
+            table.sort(weaponTypes, function(a, b)
+                return (personalityData.weaponPreference[a] or 0) > (personalityData.weaponPreference[b] or 0)
+            end)
+
+            -- Try each weapon type in order of preference
+            for _, wType in ipairs(weaponTypes) do
+                local preference = personalityData.weaponPreference[wType] or 0
+
+                -- Roll for this weapon type
+                if math.random() < preference then
+                    -- Get weapon of this type
+                    if wType == "melee" then
+                        randomWeapon = self:GetRandomWeapon(true, false, true)  -- Lethal melee
+                    elseif wType == "shotgun" then
+                        randomWeapon = "shotgun"
+                    elseif wType == "smg" then
+                        randomWeapon = math.random() > 0.5 and "smg1" or "ar2"
+                    elseif wType == "sniper" then
+                        randomWeapon = "crossbow"
+                    end
+
+                    if randomWeapon and randomWeapon  ~=  "none" then
+                        break  -- Found valid weapon
+                    end
+                end
+            end
+        end
+    end
+
+    -- Fallback to random if personality didn't pick one
+    if !randomWeapon or randomWeapon == "none" then
+        randomWeapon = self:GetRandomWeapon( true, false, false )  -- Lethal weapons only
+    end
+
+    -- Validate weapon and fallback to crowbar if needed
+    if !randomWeapon or randomWeapon == "none" or !EXP:WeaponExists(randomWeapon) then
+        randomWeapon = "crowbar"  -- Fallback weapon
+        print( "[Experimental Players] WARNING: No valid weapon found, using crowbar for " .. ply:Nick() )
+    end
+
+    -- Switch weapon immediately (no timer delay)
+    if ply.SwitchWeapon then
+        ply:SwitchWeapon( randomWeapon, true )
+        print( "[Experimental Players] " .. ply:Nick() .. " equipped " .. randomWeapon .. " (personality-based)" )
     end
 
     print( "[Experimental Players] Bot initialized: " .. ply:Nick() )
@@ -188,6 +280,21 @@ function PLAYER:Think()
     -- Update navigator position
     if IsValid( self.Navigator ) then
         self.Navigator:SetPos( self:GetPos() )
+    end
+
+    -- Combat think
+    if self.Think_Combat then
+        self:Think_Combat()
+    end
+
+    -- Tool usage think
+    if self.Think_ToolUse then
+        self:Think_ToolUse()
+    end
+
+    -- Contextual tool usage (smart tool decisions)
+    if self.Think_ContextualTools then
+        self:Think_ContextualTools()
     end
 
     -- Text chat think
@@ -205,12 +312,40 @@ function PLAYER:Think()
         self:Think_Building()
     end
 
+    -- Update physgun hold if holding something
+    if self.exp_PhysgunGrabbedEnt and self.PhysgunUpdateHold then
+        self:PhysgunUpdateHold(self:GetWeaponENT())
+    end
+
     -- Resume threaded think
+    if self.exp_ThreadDisabled then return end  -- Thread disabled due to too many deaths
+
     if self._Thread then
-        local ok, err = coroutine_resume( self._Thread )
-        if !ok then
-            ErrorNoHaltWithStack( "[Experimental Players] Thread error: " .. tostring( err ) )
+        -- Check coroutine status before resuming
+        local status = coroutine.status( self._Thread )
+
+        if status == "suspended" then
+            local ok, err = coroutine_resume( self._Thread )
+            if !ok then
+                ErrorNoHaltWithStack( "[Experimental Players] Thread error: " .. tostring( err ) )
+            end
+        elseif status == "dead" then
+            -- Thread finished or crashed, recreate it with retry limit
+            if !self.exp_ThreadDeathCount then self.exp_ThreadDeathCount = 0 end
+            self.exp_ThreadDeathCount = self.exp_ThreadDeathCount + 1
+
+            if self.exp_ThreadDeathCount > 5 then
+                ErrorNoHalt("[Experimental Players] Thread for " .. self:Nick() .. " died too many times (" .. self.exp_ThreadDeathCount .. "), disabling bot\n")
+                self.exp_ThreadDisabled = true
+                return
+            end
+
+            print( "[Experimental Players] WARNING: Thread died for " .. self:Nick() .. " (attempt " .. self.exp_ThreadDeathCount .. "/5), recreating..." )
+            self._Thread = coroutine_create( function()
+                self:ThreadedThink()
+            end )
         end
+        -- If status is "running", skip (shouldn't happen but prevents errors)
     end
 end
 
@@ -226,10 +361,24 @@ function PLAYER:ThreadedThink()
             self:State_Wander()
         elseif state == "Combat" then
             self:State_Combat()
+        elseif state == "Retreat" then
+            self:State_Retreat()
+        elseif state == "Objective" then
+            self:State_Objective()
+        elseif state == "ToolUse" then
+            self:State_ToolUse()
         elseif state == "AdminDuty" then
-            self:State_AdminDuty()
+            if self.State_AdminDuty then
+                self:State_AdminDuty()
+            else
+                self:SetState("Idle")
+            end
         elseif state == "UsingCommand" then
-            self:State_UsingCommand()
+            if self.State_UsingCommand then
+                self:State_UsingCommand()
+            else
+                self:SetState("Idle")
+            end
         elseif state == "Jailed" then
             -- Being held by admin, do nothing
             CoroutineWait( self, 1 )
@@ -242,6 +391,21 @@ end
 --[[ State Functions ]]--
 
 function PLAYER:SetState( newState )
+    local oldState = self.exp_State
+
+    -- Clean up old state data
+    if oldState == "Combat" then
+        self.exp_NextStrafeTime = nil
+        self.exp_CombatStartTime = nil
+    elseif oldState == "Retreat" then
+        self.exp_RetreatEndTime = nil
+        self.exp_RetreatingFrom = nil
+    elseif oldState == "Cover" then
+        if self.LeaveCover then
+            self:LeaveCover()
+        end
+    end
+
     self.exp_State = newState
     self.exp_StateTime = CurTime()
 
@@ -252,10 +416,15 @@ function PLAYER:SetState( newState )
 end
 
 function PLAYER:State_Idle()
-    -- Idle state - do nothing for a bit, then wander
+    -- Idle state - do nothing for a bit, then pursue objectives or wander
     local idleDuration = self.exp_IdleDuration or 3
     if CurTime() > self.exp_StateTime + idleDuration then
-        self:SetState( "Wander" )
+        -- Check for objectives first
+        if self.ShouldPursueObjective and self:ShouldPursueObjective() then
+            self:SetState( "Objective" )
+        else
+            self:SetState( "Wander" )
+        end
     end
     CoroutineWait( self, 1 )
 end
@@ -291,6 +460,33 @@ function PLAYER:State_Combat()
         return
     end
 
+    -- Check if we should retreat (panic system)
+    if self.ShouldRetreat and self:ShouldRetreat() then
+        self:RetreatFrom( self.exp_Enemy, nil, true )
+        CoroutineWait( self, 0.1 )
+        return
+    end
+
+    -- Check if we're in cover and combat from cover
+    if self.IsInCover and self:IsInCover() then
+        if self.CombatFromCover then
+            self:CombatFromCover()
+            CoroutineWait( self, 0.1 )
+            return
+        end
+    end
+
+    -- Check if we should seek cover
+    if self.ShouldSeekCover and self:ShouldSeekCover() then
+        local coverData = self:FindBestCover()
+        if coverData then
+            print("[EXP] " .. self:Nick() .. " seeking cover!")
+            self:MoveToCover(coverData)
+            CoroutineWait( self, 0.5 )
+            return
+        end
+    end
+
     local enemy = self.exp_Enemy
     local dist = self:GetPos():Distance( enemy:GetPos() )
 
@@ -300,47 +496,218 @@ function PLAYER:State_Combat()
         -- No weapon, try to find one
         if self.SwitchWeapon then
             local randomWeapon = EXP:GetRandomWeapon( true, false, false )
-            self:SwitchWeapon( randomWeapon, true )
+            if randomWeapon and randomWeapon  ~=  "none" then
+                self:SwitchWeapon( randomWeapon, true )
+            end
         end
         CoroutineWait( self, 1 )
         return
     end
 
-    local keepDist = self.exp_CombatKeepDistance or 200
-    local attackRange = self.exp_CombatAttackRange or 500
+    -- Use weapon-specific ranges
+    local keepDist = weaponData.keepdistance or 200
+    local attackRange = weaponData.attackrange or 500
+    local isMelee = weaponData.ismelee or false
 
-    -- Move towards or away from enemy
+    -- Determine if we're reloading
+    local isReloading = self.exp_IsReloading or false
+
+    -- Initialize strafe timer if not exists
+    if !self.exp_NextStrafeTime then
+        self.exp_NextStrafeTime = 0
+    end
+
+    -- Tactical positioning with strafing
+    local inKeepRange = dist <= keepDist
+    local movePos = enemy:GetPos()
+
     if dist > attackRange then
-        -- Too far, move closer
+        -- Too far, move closer directly
         if self.MoveTowards then
             self:MoveTowards( enemy:GetPos() )
         end
     elseif dist < keepDist * 0.5 then
         -- Too close, back up
-        local awayPos = self:GetPos() - ( enemy:GetPos() - self:GetPos() ):GetNormalized() * 200
+        local awayDir = ( self:GetPos() - enemy:GetPos() ):GetNormalized()
+        local awayPos = self:GetPos() + awayDir * 200
         if self.MoveTowards then
             self:MoveTowards( awayPos )
         end
     else
-        -- At good distance, stop moving
-        if self.StopMoving then
-            self:StopMoving()
+        -- At optimal distance - strafe!
+        if CurTime() >= self.exp_NextStrafeTime then
+            -- Calculate strafe position perpendicular to enemy
+            local toEnemy = ( enemy:GetPos() - self:GetPos() ):GetNormalized()
+            local strafeDir = Vector( -toEnemy.y, toEnemy.x, 0 ):GetNormalized()
+
+            -- Randomly strafe left or right
+            if math.random( 1, 2 ) == 1 then
+                strafeDir = -strafeDir
+            end
+
+            -- Calculate strafe position
+            local strafePos = self:GetPos() + strafeDir * math.random( 50, 150 )
+
+            -- Check if strafe position is valid (not in wall)
+            if util.IsInWorld( strafePos ) then
+                movePos = strafePos
+            end
+
+            -- Reset strafe timer
+            self.exp_NextStrafeTime = CurTime() + math.random( 1, 3 )
+        end
+
+        -- Move to strafe position
+        if self.MoveTowards then
+            self:MoveTowards( movePos )
         end
     end
 
-    -- Aim at enemy
-    local aimDir = ( enemy:GetPos() + Vector( 0, 0, 40 ) - self:GetShootPos() ):GetNormalized()
+    -- Aim at enemy (lead target slightly if moving)
+    local aimPos = enemy:GetPos() + Vector( 0, 0, 40 )
+    if !isMelee and enemy:GetVelocity():Length() > 100 then
+        -- Lead moving targets
+        aimPos = aimPos + enemy:GetVelocity() * 0.1
+    end
+    local aimDir = ( aimPos - self:GetShootPos() ):GetNormalized()
     local aimAng = aimDir:Angle()
     self:SetEyeAngles( aimAng )
 
-    -- Attack if in range
-    if dist <= attackRange and self.Attack then
+    -- Attack if in range and not reloading
+    if dist <= attackRange and !isReloading and self.Attack then
         self:Attack( enemy )
     end
 
     -- Check if we need to reload
-    if self.CanReload and self:CanReload() and self:GetWeaponClip() <= 2 then
+    if self.CanReload and self:CanReload() and self:GetWeaponClip() and self:GetWeaponClip() <= 2 then
         self:Reload()
+    end
+
+    CoroutineWait( self, 0.1 )
+end
+
+function PLAYER:State_Building()
+    -- Building state - spawn props/entities
+    if !self.ShouldBuild or !self:ShouldBuild() then
+        self:SetState( "Idle" )
+        return
+    end
+
+    -- Choose what to build based on personality
+    local action = math.random( 1, 3 )
+    if action == 1 and self.SpawnProp then
+        self:SpawnProp()
+    elseif action == 2 and self.SpawnEntity then
+        self:SpawnEntity()
+    elseif action == 3 and self.SpawnNPC then
+        self:SpawnNPC()
+    end
+
+    -- Wait after building
+    CoroutineWait( self, math.random( 2, 5 ) )
+    self:SetState( "Idle" )
+end
+
+function PLAYER:State_Objective()
+    -- Objective state - pursue gamemode objectives
+    if !EXP.GameMode or !EXP.GameMode.Active then
+        self:SetState( "Idle" )
+        return
+    end
+
+    -- Delegate to gamemode-specific AI
+    local gameMode = EXP.GameMode
+    if gameMode.BotThink then
+        local result = gameMode:BotThink( self )
+        if result == "done" then
+            self:SetState( "Idle" )
+            return
+        end
+    end
+
+    CoroutineWait( self, 0.5 )
+end
+
+function PLAYER:State_ToolUse()
+    -- Tool use state - use tool gun for construction
+    if !self.exp_ToolUseTarget then
+        self:SetState( "Idle" )
+        return
+    end
+
+    -- Use tool if we have one
+    if self.exp_Weapon == "toolgun" then
+        -- Tool gun usage logic would go here
+        -- For now, just placeholder
+        CoroutineWait( self, math.random( 1, 3 ) )
+        self:SetState( "Idle" )
+    else
+        -- Switch to tool gun
+        if self.SwitchWeapon and EXP:WeaponExists( "toolgun" ) then
+            self:SwitchWeapon( "toolgun", true )
+            CoroutineWait( self, 0.5 )
+        else
+            self:SetState( "Idle" )
+        end
+    end
+end
+
+function PLAYER:State_AdminDuty()
+    -- Admin state - enforce rules
+    if !self.exp_IsAdminBot then
+        self:SetState( "Idle" )
+        return
+    end
+
+    -- Admin logic would go here
+    -- For now, just wander and observe
+    self:State_Wander()
+end
+
+function PLAYER:State_Retreat()
+    -- Retreat state - run away from enemy
+    if CurTime() >= (self.exp_RetreatEndTime or 0) then
+        -- Retreat timeout reached, return to idle
+        self:SetState( "Idle" )
+        print( "[EXP] " .. self:Nick() .. " finished retreating" )
+        return
+    end
+
+    local enemy = self.exp_RetreatingFrom or self.exp_Enemy
+    if !IsValid( enemy ) then
+        -- Enemy is gone, safe to return to idle
+        self:SetState( "Idle" )
+        return
+    end
+
+    -- Calculate retreat position (away from enemy)
+    local awayDir = ( self:GetPos() - enemy:GetPos() ):GetNormalized()
+    local retreatPos = self:GetPos() + awayDir * 1000
+
+    -- Move to retreat position with sprint
+    if self.MoveToPos then
+        local result = self:MoveToPos( retreatPos, {
+            tolerance = 100,
+            sprint = true,
+            maxage = 3
+        } )
+
+        if result == "ok" or result == "stuck" then
+            -- Reached retreat position or stuck, wait a bit
+            CoroutineWait( self, 1 )
+        end
+    else
+        -- Fallback to direct movement
+        if self.MoveTowards then
+            self:MoveTowards( retreatPos )
+        end
+        CoroutineWait( self, 0.5 )
+    end
+
+    -- Look back occasionally to track enemy
+    if math.random( 1, 10 ) > 7 then
+        local lookDir = ( enemy:GetPos() - self:GetShootPos() ):GetNormalized()
+        self:SetEyeAngles( lookDir:Angle() )
     end
 
     CoroutineWait( self, 0.1 )
@@ -375,6 +742,26 @@ hook.Add( "SetupMove", "EXP_PlayerBotMovement", function( ply, mv, cmd )
     if !ply.exp_IsExperimentalPlayer then return end
     if !IsValid( ply ) or !ply:Alive() then return end
 
+    -- Get current buttons
+    local buttons = mv:GetButtons()
+
+    -- Handle crouch state
+    if ply.exp_MoveCrouch then
+        buttons = bit.bor( buttons, IN_DUCK )
+    else
+        buttons = bit.band( buttons, bit.bnot( IN_DUCK ) )
+    end
+
+    -- Handle sprint state
+    if ply.exp_MoveSprint then
+        buttons = bit.bor( buttons, IN_SPEED )
+    else
+        buttons = bit.band( buttons, bit.bnot( IN_SPEED ) )
+    end
+
+    -- Apply buttons
+    mv:SetButtons( buttons )
+
     -- Apply eye angle changes
     if ply.exp_LookTowards_Pos then
         local lookPos = ply.exp_LookTowards_Pos
@@ -387,7 +774,7 @@ hook.Add( "SetupMove", "EXP_PlayerBotMovement", function( ply, mv, cmd )
         end
     end
 
-    -- Apply movement towards position (THIS IS HOW GLAMBDA DOES IT!)
+    -- Apply movement towards position (pathfinding)
     if ply.exp_FollowPath_Pos then
         local targetPos = ply.exp_FollowPath_Pos
         if CurTime() > (ply.exp_FollowPath_EndT or 0) then
@@ -400,6 +787,15 @@ hook.Add( "SetupMove", "EXP_PlayerBotMovement", function( ply, mv, cmd )
             local speed = ply.exp_MoveSprint and ply:GetRunSpeed() or ply:GetWalkSpeed()
             mv:SetForwardSpeed( speed )
         end
+    -- Apply manual movement input (combat/MoveTowards)
+    elseif ply.exp_InputForwardMove and ply.exp_InputForwardMove  ~=  0 then
+        -- Use input angles if set
+        local moveAng = ply.exp_InputAngles or ply:EyeAngles()
+        mv:SetMoveAngles( moveAng )
+
+        -- Apply forward/side movement
+        mv:SetForwardSpeed( ply.exp_InputForwardMove or 0 )
+        mv:SetSideSpeed( ply.exp_InputSideMove or 0 )
     end
 end )
 

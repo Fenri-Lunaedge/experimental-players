@@ -50,6 +50,27 @@ Experimental Players is a next-generation bot mod for Garry's Mod that uses real
 3. Restart your server
 4. Bots will appear in the spawn menu under "Experimental Players"
 
+## Console Commands
+
+### Spawning & Management
+- `exp_spawn <name>` - Spawn a bot with optional custom name
+- `exp_killall` - Kill all active bots
+- `exp_removeall` - Remove all bots from server
+
+### Debug & Testing
+- `exp_listweapons` - List all available weapons with details
+- `exp_debug_combat` - Show combat debug info for all bots
+- `exp_debug_reloadfiles` - Reload all addon files (admin only)
+
+### Configuration
+All ConVars start with `exp_`:
+- `exp_combat_range` - Enemy detection range
+- `exp_combat_attackplayers` - Allow bots to attack human players
+- `exp_building_enabled` - Enable/disable building system
+- `exp_building_maxprops` - Max props per bot
+
+See `lua/experimental_players/includes/sh_convars.lua` for full list.
+
 ## Architecture
 
 Based on the revolutionary GLambda Players architecture with enhancements:
@@ -67,6 +88,18 @@ experimental-players/
 │       ├── gamemodes/              # CTF, KOTH, TDM
 │       └── compatibility/          # Lambda addon support
 ```
+
+## Latest Updates
+
+**2025-11-16 - Major Combat Overhaul:**
+- ✅ Fixed critical weapon loading issues
+- ✅ Implemented panic/retreat system
+- ✅ Added intelligent threat assessment
+- ✅ Tactical strafing during combat
+- ✅ Weapon-specific combat distances
+- ✅ Smart damage response with evasion
+
+See [IMPROVEMENTS.md](IMPROVEMENTS.md) for detailed changelog.
 
 ## Credits
 

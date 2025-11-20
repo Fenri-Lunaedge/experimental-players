@@ -18,22 +18,49 @@ local PLAYER = EXP.Player
 --[[ Weapon Entity Management ]]--
 
 function PLAYER:CreateWeaponEntity()
-    local wepEnt = ents_Create( "prop_physics" )
+    local wepEnt = ents_Create( "base_anim" )
     if !IsValid( wepEnt ) then return end
 
     wepEnt:SetModel( "models/weapons/w_crowbar.mdl" )
     wepEnt:SetSolid( SOLID_NONE )
-    wepEnt:SetParent( self )
-    wepEnt:SetLocalPos( Vector( 0, 0, 0 ) )
-    wepEnt:SetLocalAngles( Angle( 0, 0, 0 ) )
+    wepEnt:SetMoveType( MOVETYPE_NONE )
     wepEnt:SetCollisionGroup( COLLISION_GROUP_IN_VEHICLE )
+
+    -- Get right hand attachment point (Lambda style)
+    local attachPoint = EXP:GetAttachmentPoint( self, "hand" )
+    if attachPoint then
+        wepEnt:SetPos( attachPoint.Pos )
+        wepEnt:SetAngles( attachPoint.Ang )
+    end
+
     wepEnt:Spawn()
     wepEnt:Activate()
-    wepEnt:SetNoDraw( true )
+
+    -- Parent to player WITH attachment index (this is critical!)
+    if attachPoint and attachPoint.Index > 0 then
+        wepEnt:SetParent( self, attachPoint.Index )
+    else
+        wepEnt:SetParent( self )
+        -- Fallback: follow bone if attachment failed
+        if attachPoint and attachPoint.Bone then
+            wepEnt:FollowBone( self, attachPoint.Bone )
+        end
+    end
+
+    -- Don't enable bonemerge yet - weapon data will control this
+    wepEnt:SetLocalPos( Vector( 0, 0, 0 ) )
+    wepEnt:SetLocalAngles( Angle( 0, 0, 0 ) )
+
     wepEnt:DrawShadow( false )
+    wepEnt:SetNoDraw( false )  -- Will be controlled by weapon data
 
     wepEnt.exp_IsWeaponEntity = true
     wepEnt.exp_Owner = self
+
+    -- Override IsCarriedByLocalPlayer to prevent ground rendering
+    wepEnt.IsCarriedByLocalPlayer = function( entity )
+        return false
+    end
 
     self.exp_WeaponEntity = wepEnt
     return wepEnt
@@ -58,6 +85,12 @@ function PLAYER:SwitchWeapon( weaponName, forceSwitch )
     -- Check if we can switch
     if !forceSwitch and self.exp_NoWeaponSwitch then return false end
     if self.exp_Weapon == weaponName then return false end  -- Already have it
+
+    -- Cancel any pending auto-reload timer
+    local timerName = "EXP_AutoReload_" .. self:EntIndex()
+    if timer.Exists( timerName ) then
+        timer.Remove( timerName )
+    end
 
     local wepEnt = self:GetWeaponENT()
     if !IsValid( wepEnt ) then return false end
@@ -99,18 +132,28 @@ function PLAYER:SwitchWeapon( weaponName, forceSwitch )
 
     -- Update weapon entity model
     wepEnt:SetModel( newData.model or "models/weapons/w_crowbar.mdl" )
-    wepEnt:SetNoDraw( newData.nodraw or false )
-    wepEnt:DrawShadow( !newData.nodraw )
+
+    -- Set position offsets (Lambda style)
     wepEnt:SetLocalPos( newData.offpos or Vector( 0, 0, 0 ) )
     wepEnt:SetLocalAngles( newData.offang or Angle( 0, 0, 0 ) )
-    wepEnt:SetModelScale( newData.weaponscale or 1, 0 )
 
-    -- Bone merge
+    -- Bonemerge control (Lambda style)
     if newData.bonemerge then
         wepEnt:AddEffects( EF_BONEMERGE )
+        -- Note: SetModelScale doesn't work with bonemerge
     else
         wepEnt:RemoveEffects( EF_BONEMERGE )
+        -- Only apply scale if NOT using bonemerge
+        wepEnt:SetModelScale( newData.weaponscale or 1, 0 )
     end
+
+    -- Visibility control (Lambda style)
+    local noDraw = newData.nodraw or false
+    wepEnt:SetNoDraw( noDraw )
+    wepEnt:DrawShadow( !noDraw )
+
+    -- Store holdtype for animation gestures (PlayerBots don't have SetHoldType)
+    self.exp_CurrentHoldType = newData.holdtype or "normal"
 
     -- Call deploy function
     if newData.OnDeploy then
@@ -123,7 +166,7 @@ function PLAYER:SwitchWeapon( weaponName, forceSwitch )
     end
 
     -- Play weapon select sound
-    if weaponName != "none" then
+    if weaponName  ~=  "none" then
         self:EmitSound( "common/wpn_select.wav", 75, 100, 0.32, CHAN_ITEM )
     end
 
@@ -185,6 +228,18 @@ end
 --[[ Melee Attack ]]--
 
 function PLAYER:AttackMelee( weaponData, wepEnt, target )
+    -- Play attack animation (gesture)
+    local holdtype = self.exp_CurrentHoldType or "normal"
+    local attackAnim = ACT_HL2MP_GESTURE_RANGE_ATTACK_MELEE
+
+    if holdtype == "melee" or holdtype == "melee2" then
+        attackAnim = ACT_HL2MP_GESTURE_RANGE_ATTACK_MELEE
+    elseif holdtype == "fist" then
+        attackAnim = ACT_HL2MP_GESTURE_RANGE_ATTACK_FIST
+    end
+
+    self:AnimRestartGesture( GESTURE_SLOT_ATTACK_AND_RELOAD, attackAnim, true )
+
     -- Play attack sound
     if weaponData.attacksnd then
         self:EmitSound( weaponData.attacksnd, 75, 100, 1, CHAN_WEAPON )
@@ -225,6 +280,27 @@ end
 --[[ Ranged Attack ]]--
 
 function PLAYER:AttackRanged( weaponData, wepEnt, target )
+    -- Play attack animation (gesture) based on holdtype
+    local holdtype = self.exp_CurrentHoldType or "normal"
+    local attackAnim = ACT_HL2MP_GESTURE_RANGE_ATTACK_PISTOL
+
+    -- Map holdtype to appropriate attack animation
+    if holdtype == "pistol" or holdtype == "revolver" then
+        attackAnim = ACT_HL2MP_GESTURE_RANGE_ATTACK_PISTOL
+    elseif holdtype == "smg" or holdtype == "ar2" or holdtype == "rifle" then
+        attackAnim = ACT_HL2MP_GESTURE_RANGE_ATTACK_AR2
+    elseif holdtype == "shotgun" then
+        attackAnim = ACT_HL2MP_GESTURE_RANGE_ATTACK_SHOTGUN
+    elseif holdtype == "crossbow" then
+        attackAnim = ACT_HL2MP_GESTURE_RANGE_ATTACK_CROSSBOW
+    elseif holdtype == "rpg" or holdtype == "physgun" or holdtype == "grenade" then
+        attackAnim = ACT_HL2MP_GESTURE_RANGE_ATTACK_RPG
+    elseif holdtype == "slam" or holdtype == "grenade" then
+        attackAnim = ACT_HL2MP_GESTURE_RANGE_ATTACK_GRENADE
+    end
+
+    self:AnimRestartGesture( GESTURE_SLOT_ATTACK_AND_RELOAD, attackAnim, true )
+
     -- Play attack sound
     if weaponData.attacksnd then
         self:EmitSound( weaponData.attacksnd, 85, 100, 1, CHAN_WEAPON )
@@ -250,9 +326,12 @@ function PLAYER:AttackRanged( weaponData, wepEnt, target )
     bullet.Damage = weaponData.damage or 10
     bullet.AmmoType = "Pistol"
     bullet.Attacker = self
+
+    -- Capture OnDealDamage callback to avoid stale reference
+    local onDealDamage = weaponData.OnDealDamage
     bullet.Callback = function( attacker, tr, dmginfo )
-        if weaponData.OnDealDamage and IsValid( tr.Entity ) then
-            weaponData.OnDealDamage( self, wepEnt, tr.Entity, dmginfo, true, tr.Entity:Health() <= 0 )
+        if onDealDamage and IsValid( tr.Entity ) and IsValid( self ) and IsValid( wepEnt ) then
+            onDealDamage( self, wepEnt, tr.Entity, dmginfo, true, tr.Entity:Health() <= 0 )
         end
     end
 
@@ -279,8 +358,9 @@ function PLAYER:AttackRanged( weaponData, wepEnt, target )
 
     -- Auto reload if empty
     if self.exp_Clip == 0 then
-        timer.Simple( 0.5, function()
-            if IsValid( self ) then
+        local timerName = "EXP_AutoReload_" .. self:EntIndex()
+        timer.Create( timerName, 0.5, 1, function()
+            if IsValid( self ) and self:Alive() and self.exp_Weapon == weaponData.name then
                 self:Reload()
             end
         end )

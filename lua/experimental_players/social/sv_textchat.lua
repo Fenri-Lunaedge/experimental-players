@@ -162,7 +162,7 @@ function PLAYER:FinishTyping()
     local text = self.exp_TypingText
 
     -- Send to chat
-    if text and text != "" then
+    if text and text  ~=  "" then
         -- Use player:ChatPrint for everyone
         for _, ply in ipairs(player.GetAll()) do
             if IsValid(ply) then
@@ -242,7 +242,13 @@ end
 hook.Add("PlayerSay", "EXP_RespondToChat", function(ply, text)
     if !IsValid(ply) or !text then return end
 
-    text = string_lower(text)
+    -- Skip vote commands (handled by voting system)
+    local lowerText = string_lower(text)
+    if string.StartWith(lowerText, ",startvote") or string.StartWith(lowerText, ",vote ") then
+        return  -- Let voting system handle it
+    end
+
+    text = lowerText
 
     -- Check if any bot should respond
     if !EXP.ActiveBots then return end
@@ -250,14 +256,16 @@ hook.Add("PlayerSay", "EXP_RespondToChat", function(ply, text)
     for _, bot in ipairs(EXP.ActiveBots) do
         if !IsValid(bot._PLY) then continue end
 
+        local ply = bot._PLY  -- Extract entity from wrapper
+
         -- Respond if mentioned by name
-        local botName = string_lower(bot._PLY:Nick())
+        local botName = string_lower(ply:Nick())
         if string.find(text, botName) then
             -- 70% chance to respond
             if math_random(1, 100) < 70 then
                 timer.Simple(math_random(1, 3), function()
-                    if IsValid(bot._PLY) and bot.SayText then
-                        bot:SayText("Yes?", "idle")
+                    if IsValid(ply) and ply.SayText then
+                        ply:SayText("Yes?", "idle")
                     end
                 end)
             end
@@ -267,8 +275,8 @@ hook.Add("PlayerSay", "EXP_RespondToChat", function(ply, text)
         -- Random chance to respond to any message
         if math_random(1, 100) < 10 then  -- 10% chance
             timer.Simple(math_random(2, 5), function()
-                if IsValid(bot._PLY) and bot.SayText then
-                    bot:SayText(nil, "idle")
+                if IsValid(ply) and ply.SayText then
+                    ply:SayText(nil, "idle")
                 end
             end)
             break  -- Only one bot responds

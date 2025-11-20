@@ -114,7 +114,7 @@ function KOTH:Think()
 	-- Update hill control
 	local controllingTeam = self:GetHillController()
 
-	if controllingTeam != self.ControllingTeam then
+	if controllingTeam  ~=  self.ControllingTeam then
 		self.ControllingTeam = controllingTeam
 
 		-- Announce control change
@@ -244,7 +244,7 @@ end
 -- Make bots move towards the hill
 hook.Add( "Think", "EXP_KOTH_BotAI", function()
 	if !EXP.GameMode.Active then return end
-	if EXP.GameMode.Name != "KOTH" then return end
+	if EXP.GameMode.Name  ~=  "KOTH" then return end
 	if !EXP.GameMode.RoundActive then return end
 
 	local hillPos = KOTH.HillPosition
@@ -263,7 +263,7 @@ hook.Add( "Think", "EXP_KOTH_BotAI", function()
 		if dist < KOTH.HillRadius then continue end
 
 		-- Check if idle or wandering
-		if bot.exp_State != "Idle" and bot.exp_State != "Wander" then continue end
+		if bot.exp_State  ~=  "Idle" and bot.exp_State  ~=  "Wander" then continue end
 
 		-- Move to hill
 		if bot.MoveToPos then

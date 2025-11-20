@@ -112,4 +112,122 @@ function EXP:CheckLambdaCompatibility()
     return true, "Compatible - " .. lambdaWeapons .. " Lambda weapons available, " .. expWeapons .. " total weapons"
 end
 
-print( "[Experimental Players] Lambda weapon compatibility loaded" )
+--[[ Zeta Players Weapon Compatibility ]]--
+
+local function ImportZetaWeapons()
+    if !ZetaWeaponConfigTable then
+        print( "[Experimental Players] Zeta Players weapons table not found (yet)" )
+        return 0
+    end
+
+    local imported = 0
+
+    for weaponClass, weaponConfig in pairs( ZetaWeaponConfigTable ) do
+        local weaponName = string.lower( weaponClass:gsub( "weapon_", "" ) )
+
+        if !_EXPERIMENTALPLAYERSWEAPONS[ weaponName ] then
+            _EXPERIMENTALPLAYERSWEAPONS[ weaponName ] = {
+                model = weaponConfig.mdl or "models/weapons/w_pistol.mdl",
+                prettyname = weaponConfig.name or weaponName,
+                origin = "Zeta Players",
+                holdtype = weaponConfig.holdtype or "pistol",
+                islethal = weaponConfig.lethal or true,
+                ismelee = weaponConfig.melee or false,
+
+                damage = weaponConfig.damage or 10,
+                attackrange = weaponConfig.range or 2000,
+                keepdistance = weaponConfig.keepdistance or 300,
+                clip = weaponConfig.clip or 30,
+                rateoffire = weaponConfig.firerate or 0.2,
+
+                tracername = weaponConfig.tracer or "Tracer",
+                muzzleflash = weaponConfig.muzzleflash or 1,
+
+                dropentity = weaponClass,
+            }
+
+            imported = imported + 1
+        end
+    end
+
+    if imported > 0 then
+        print( "[Experimental Players] Imported " .. imported .. " weapons from Zeta Players" )
+    end
+
+    return imported
+end
+
+hook.Add( "Initialize", "EXP_ImportZetaWeapons", function()
+    timer.Simple( 2.5, function()
+        ImportZetaWeapons()
+    end )
+end )
+
+--[[ Generic SWEP Auto-Import ]]--
+
+local function ImportGenericSWEPs()
+    local imported = 0
+
+    -- Skip list for base HL2 weapons
+    local skipList = {
+        weapon_pistol = true,
+        weapon_357 = true,
+        weapon_smg1 = true,
+        weapon_ar2 = true,
+        weapon_shotgun = true,
+        weapon_crossbow = true,
+        weapon_rpg = true,
+        weapon_crowbar = true,
+        weapon_stunstick = true,
+        weapon_physcannon = true,
+        weapon_frag = true,
+        weapon_slam = true,
+        weapon_bugbait = true,
+        gmod_tool = true,
+        gmod_camera = true,
+    }
+
+    for _, weaponTable in pairs( weapons.GetList() ) do
+        if !weaponTable or !weaponTable.ClassName or !weaponTable.WorldModel then continue end
+
+        local className = weaponTable.ClassName
+        if skipList[ className ] then continue end
+
+        local weaponName = string.lower( className:gsub( "weapon_", "" ) )
+        if _EXPERIMENTALPLAYERSWEAPONS[ weaponName ] then continue end
+
+        -- Import SWEP
+        _EXPERIMENTALPLAYERSWEAPONS[ weaponName ] = {
+            model = weaponTable.WorldModel,
+            prettyname = weaponTable.PrintName or weaponName,
+            origin = "External Addon",
+            holdtype = weaponTable.HoldType or "pistol",
+            islethal = true,
+            ismelee = weaponTable.Primary and weaponTable.Primary.ClipSize == -1 or false,
+
+            damage = weaponTable.Primary and weaponTable.Primary.Damage or 10,
+            attackrange = 2000,
+            keepdistance = 300,
+            clip = weaponTable.Primary and weaponTable.Primary.ClipSize or 30,
+            rateoffire = weaponTable.Primary and weaponTable.Primary.Delay or 0.2,
+
+            dropentity = className,
+        }
+
+        imported = imported + 1
+    end
+
+    if imported > 0 then
+        print( "[Experimental Players] Auto-imported " .. imported .. " external SWEP weapons" )
+    end
+
+    return imported
+end
+
+hook.Add( "Initialize", "EXP_ImportGenericWeapons", function()
+    timer.Simple( 3, function()
+        ImportGenericSWEPs()
+    end )
+end )
+
+print( "[Experimental Players] Weapon compatibility loaded (Lambda, Zeta, SWEP)" )

@@ -13,6 +13,8 @@ ENT.AdminOnly = false
 
 if ( SERVER ) then
 
+    local coroutine_yield = coroutine.yield
+
     function ENT:Initialize()
         self:SetModel( "models/hunter/blocks/cube025x025x025.mdl" )
         self:SetSolid( SOLID_NONE )
@@ -41,6 +43,9 @@ if ( SERVER ) then
 
         local result = path:Compute( self, goal, options.generator )
         if !result then
+            -- Clear any existing path on failure
+            self.path = nil
+            self.currentSegment = 1
             return false
         end
 
@@ -73,10 +78,6 @@ if ( SERVER ) then
         self.currentSegment = 1
     end
 
-    function ENT:GetCurrentSegment()
-        return self.currentSegment
-    end
-
     function ENT:AdvanceSegment()
         self.currentSegment = self.currentSegment + 1
     end
@@ -90,7 +91,7 @@ if ( SERVER ) then
         while true do
             -- Navigator just exists for path computation
             -- The player bot will read the path from this entity
-            coroutine.yield()
+            coroutine_yield()
         end
     end
 

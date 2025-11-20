@@ -67,7 +67,34 @@ function EXP:LoadFiles( caller )
 
     print( "[Experimental Players] Core files loaded" )
 
-    -- Load main player class FIRST (defines PLAYER table)
+    -- Weapon definitions (MUST load before player class)
+    local dirPath = "experimental_players/weapons/"
+    for _, luaFile in ipairs( file_Find( dirPath .. "*.lua", "LUA", "nameasc" ) ) do
+        if string_StartWith( luaFile, "sv_" ) then
+            include( dirPath .. luaFile )
+            print( "[Experimental Players] Loaded Weapon Definition (Server): " .. luaFile )
+        elseif string_StartWith( luaFile, "sh_" ) then
+            if ( SERVER ) then AddCSLuaFile( dirPath .. luaFile ) end
+            include( dirPath .. luaFile )
+            print( "[Experimental Players] Loaded Weapon Definition (Shared): " .. luaFile )
+        elseif ( SERVER ) then
+            -- No prefix = shared for weapons
+            AddCSLuaFile( dirPath .. luaFile )
+            include( dirPath .. luaFile )
+            print( "[Experimental Players] Loaded Weapon Definition: " .. luaFile )
+        end
+    end
+
+    print( "[Experimental Players] Weapon definitions loaded" )
+
+    -- Validate weapon table
+    if _EXPERIMENTALPLAYERSWEAPONS and table.Count(_EXPERIMENTALPLAYERSWEAPONS) > 0 then
+        print( "[Experimental Players] Weapon registry validated: " .. table.Count(_EXPERIMENTALPLAYERSWEAPONS) .. " weapons available" )
+    else
+        print( "[Experimental Players] WARNING: No weapons loaded! Bots may not function correctly." )
+    end
+
+    -- Load main player class (defines PLAYER table)
     if ( SERVER ) then AddCSLuaFile( "experimental_players/exp_player.lua" ) end
     include( "experimental_players/exp_player.lua" )
     print( "[Experimental Players] Main player class loaded" )
@@ -180,11 +207,6 @@ function EXP:UpdateData()
         if !file_Exists( "experimental_players/proplist.json", "DATA" ) then
             self.FILE:WriteFile( "experimental_players/proplist.json", {} )
         end
-
-        -- Load default weapons
-        if self.ReadDefaultWeapons then
-            self:ReadDefaultWeapons()
-        end
     end
 
     -- Run data update functions
@@ -238,6 +260,72 @@ concommand_Add( "exp_spawn", function(ply, cmd, args)
     if ( SERVER ) and EXP.CreateLambdaPlayer then
         local name = args[1] or "Experimental Bot"
         EXP:CreateLambdaPlayer(name)
+    end
+end )
+
+concommand_Add( "exp_killall", function(ply, cmd, args)
+    if !IsValid(ply) or !ply:IsSuperAdmin() then return end
+    if ( SERVER ) and EXP.ActiveBots then
+        local count = 0
+        for _, bot in ipairs(EXP.ActiveBots) do
+            if IsValid(bot._PLY) then
+                bot._PLY:Kill()
+                count = count + 1
+            end
+        end
+        print("[Experimental Players] Killed " .. count .. " bots")
+    end
+end )
+
+concommand_Add( "exp_removeall", function(ply, cmd, args)
+    if !IsValid(ply) or !ply:IsSuperAdmin() then return end
+    if ( SERVER ) and EXP.ActiveBots then
+        local count = 0
+        for _, bot in ipairs(EXP.ActiveBots) do
+            if IsValid(bot._PLY) then
+                bot._PLY:Kick("Removed by admin")
+                count = count + 1
+            end
+        end
+        EXP.ActiveBots = {}
+        print("[Experimental Players] Removed " .. count .. " bots")
+    end
+end )
+
+concommand_Add( "exp_listweapons", function(ply, cmd, args)
+    if !IsValid(ply) or !ply:IsSuperAdmin() then return end
+    if ( SERVER ) then
+        print("[Experimental Players] Available Weapons:")
+        local count = 0
+        for weaponName, weaponData in pairs(_EXPERIMENTALPLAYERSWEAPONS or {}) do
+            if !weaponData.cantbeselected then
+                local wepType = weaponData.ismelee and "Melee" or "Ranged"
+                local lethal = weaponData.islethal and "Lethal" or "Non-Lethal"
+                print("  - " .. weaponName .. " (" .. weaponData.prettyname .. ") [" .. wepType .. ", " .. lethal .. "]")
+                count = count + 1
+            end
+        end
+        print("[Experimental Players] Total: " .. count .. " weapons")
+    end
+end )
+
+concommand_Add( "exp_debug_combat", function(ply, cmd, args)
+    if !IsValid(ply) or !ply:IsSuperAdmin() then return end
+    if ( SERVER ) and EXP.ActiveBots then
+        for _, bot in ipairs(EXP.ActiveBots) do
+            if IsValid(bot._PLY) then
+                local ply_bot = bot._PLY
+                print("[EXP DEBUG] " .. ply_bot:Nick() .. ":")
+                print("  State: " .. tostring(ply_bot.exp_State))
+                print("  Enemy: " .. tostring(ply_bot.exp_Enemy))
+                print("  Health: " .. ply_bot:Health() .. "/" .. ply_bot:GetMaxHealth())
+                print("  Weapon: " .. tostring(ply_bot.exp_CurrentWeapon))
+                if IsValid(ply_bot.exp_Enemy) then
+                    local threat = ply_bot:AssessThreat(ply_bot.exp_Enemy)
+                    print("  Threat Level: " .. math.floor(threat))
+                end
+            end
+        end
     end
 end )
 

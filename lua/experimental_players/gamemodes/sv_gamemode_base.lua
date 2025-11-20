@@ -123,7 +123,20 @@ function EXP:AssignPlayerToTeam( ply, teamID )
 	self.GameMode.Teams[ teamID ].players[ ply ] = true
 	ply.exp_Team = teamID
 
-	local teamName = self.GameMode.Teams[ teamID ].name
+	-- Set team color for visual identification
+	local teamData = self.GameMode.Teams[ teamID ]
+	if teamData.color then
+		local col = teamData.color
+		-- Convert Color to Vector for SetPlayerColor
+		local colorVec = Vector( col.r / 255, col.g / 255, col.b / 255 )
+		ply:SetPlayerColor( colorVec )
+	end
+
+	-- Network team info to clients
+	ply:SetNW2Int( "exp_Team", teamID )
+	ply:SetNW2String( "exp_TeamName", teamData.name )
+
+	local teamName = teamData.name
 	ply:ChatPrint( "[GAMEMODE] You have joined team: " .. teamName )
 
 	print( "[Experimental Players] " .. ply:Nick() .. " joined team: " .. teamName )
@@ -157,11 +170,30 @@ function EXP:AddTeamScore( teamID, amount )
 
 	self.GameMode.Teams[ teamID ].score = ( self.GameMode.Teams[ teamID ].score or 0 ) + amount
 
-	-- Broadcast score update
+	-- Network score to all clients
+	SetGlobalInt( "exp_Team" .. teamID .. "_Score", self.GameMode.Teams[ teamID ].score )
+
+	-- Broadcast score update with visual divider
 	local teamName = self.GameMode.Teams[ teamID ].name
+	local score = self.GameMode.Teams[ teamID ].score
 	for _, ply in ipairs( player.GetAll() ) do
 		if IsValid( ply ) then
-			ply:ChatPrint( "[GAMEMODE] " .. teamName .. " scored! (" .. self.GameMode.Teams[ teamID ].score .. " points)" )
+			ply:ChatPrint( "═══════════════════════════════════" )
+			ply:ChatPrint( "★ " .. teamName .. " SCORED! ★" )
+			ply:ChatPrint( "Score: " .. score .. " points" )
+			ply:ChatPrint( "═══════════════════════════════════" )
+		end
+	end
+
+	-- Play notification sound
+	for _, ply in ipairs( player.GetAll() ) do
+		if IsValid( ply ) then
+			-- Check if it's their team
+			if ply.exp_Team == teamID then
+				ply:EmitSound( "buttons/button14.wav", 75, 100 )  -- Positive sound
+			else
+				ply:EmitSound( "buttons/button10.wav", 75, 100 )  -- Negative sound
+			end
 		end
 	end
 end
@@ -289,6 +321,10 @@ end
 
 --[[ Think Loop ]]--
 
+-- Track last score broadcast time
+_EXP_LastScoreBroadcast = 0
+_EXP_LastTimeWarning = 0
+
 hook.Add( "Think", "EXP_GameModeThink", function()
 	if !EXP.GameMode.Active then return end
 	if !EXP.GameMode.RoundActive then return end
@@ -296,6 +332,36 @@ hook.Add( "Think", "EXP_GameModeThink", function()
 	-- Check if round time expired
 	if EXP:GetRoundTimeRemaining() <= 0 then
 		EXP:EndRound()
+		return
+	end
+
+	-- Periodic score updates (every 60 seconds)
+	if CurTime() - _EXP_LastScoreBroadcast > 60 then
+		_EXP_LastScoreBroadcast = CurTime()
+
+		for _, ply in ipairs( player.GetAll() ) do
+			if IsValid( ply ) then
+				ply:ChatPrint( "─────────────────────────────────" )
+				ply:ChatPrint( "Current Scores:" )
+				for teamID, team in pairs( EXP.GameMode.Teams ) do
+					ply:ChatPrint( "  " .. team.name .. ": " .. ( team.score or 0 ) )
+				end
+				ply:ChatPrint( "─────────────────────────────────" )
+			end
+		end
+	end
+
+	-- Time warnings (at 60s, 30s, 10s remaining)
+	local timeRemaining = math.floor( EXP:GetRoundTimeRemaining() )
+	if ( timeRemaining == 60 or timeRemaining == 30 or timeRemaining == 10 ) and timeRemaining  ~=  _EXP_LastTimeWarning then
+		_EXP_LastTimeWarning = timeRemaining
+
+		for _, ply in ipairs( player.GetAll() ) do
+			if IsValid( ply ) then
+				ply:ChatPrint( "⏰ " .. timeRemaining .. " seconds remaining!" )
+				ply:EmitSound( "buttons/button17.wav", 75, 100 )
+			end
+		end
 	end
 
 	-- Call gamemode think

@@ -16,9 +16,9 @@ if ( SERVER ) then
     function ENT:Initialize()
         -- Spawn a bot when this entity is created
         if EXP and EXP.CreateLambdaPlayer then
-            local bot = EXP:CreateLambdaPlayer()
-            if IsValid( bot ) then
-                bot:SetPos( self:GetPos() )
+            local glace = EXP:CreateLambdaPlayer()
+            if glace and glace._PLY and IsValid( glace._PLY ) then
+                glace._PLY:SetPos( self:GetPos() )
             end
         end
 

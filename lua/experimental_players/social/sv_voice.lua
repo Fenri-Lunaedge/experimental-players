@@ -12,6 +12,150 @@ local table_Count = table.Count
 
 local PLAYER = EXP.Player
 
+--[[ Voice Pack Compatibility ]]--
+
+-- Import voice lines from Lambda Players voice packs
+local function ImportLambdaVoices()
+    -- Check if Lambda Players voice system exists
+    if LambdaVoiceChatLines then
+        print("[Experimental Players] Voice: Importing Lambda Players voice lines...")
+
+        for category, lines in pairs(LambdaVoiceChatLines) do
+            if !EXP.VoiceLines[category] then
+                EXP.VoiceLines[category] = {}
+            end
+
+            -- Merge Lambda voice lines
+            for _, line in ipairs(lines) do
+                table.insert(EXP.VoiceLines[category], line)
+            end
+        end
+
+        print("[Experimental Players] Voice: Imported " .. table.Count(LambdaVoiceChatLines) .. " Lambda voice categories")
+        return true
+    end
+
+    return false
+end
+
+-- Import voice lines from Zeta Players voice packs
+local function ImportZetaVoices()
+    -- Check if Zeta Players voice system exists
+    if zetaVoiceLines then
+        print("[Experimental Players] Voice: Importing Zeta Players voice lines...")
+
+        for category, lines in pairs(zetaVoiceLines) do
+            -- Map Zeta categories to EXP categories
+            local expCategory = category
+            if category == "taunt" then expCategory = "taunt"
+            elseif category == "death" then expCategory = "death"
+            elseif category == "hurt" then expCategory = "pain"
+            elseif category == "idle" then expCategory = "idle"
+            elseif category == "laugh" then expCategory = "taunt"
+            elseif category == "assist" then expCategory = "assist"
+            elseif category == "witness" then expCategory = "witness"
+            end
+
+            if !EXP.VoiceLines[expCategory] then
+                EXP.VoiceLines[expCategory] = {}
+            end
+
+            -- Merge Zeta voice lines
+            for _, line in ipairs(lines) do
+                table.insert(EXP.VoiceLines[expCategory], line)
+            end
+        end
+
+        print("[Experimental Players] Voice: Imported " .. table.Count(zetaVoiceLines) .. " Zeta voice categories")
+        return true
+    end
+
+    return false
+end
+
+--[[ Default Voice Lines ]]--
+
+-- Initialize default voice lines if not loaded from file
+if !EXP.VoiceLines then
+    EXP.VoiceLines = {
+        -- Idle/casual
+        idle = {
+            "npc/metropolice/vo/on1.wav",
+            "npc/metropolice/vo/on2.wav",
+            "npc/combine_soldier/vo/on1.wav",
+            "npc/combine_soldier/vo/on2.wav",
+        },
+
+        -- Combat
+        attack = {
+            "npc/metropolice/vo/chuckle.wav",
+            "npc/combine_soldier/vo/alert1.wav",
+            "npc/combine_soldier/vo/bouncerbouncer.wav",
+        },
+
+        taunt = {
+            "npc/metropolice/vo/chuckle.wav",
+        },
+
+        kill = {
+            "npc/metropolice/vo/chuckle.wav",
+            "npc/combine_soldier/vo/overwatchconfirmsightline.wav",
+        },
+
+        -- Damage/retreat
+        pain = {
+            "npc/metropolice/vo/shit.wav",
+            "npc/combine_soldier/vo/cover.wav",
+        },
+
+        panic = {
+            "npc/metropolice/vo/runninglowonrounds.wav",
+            "npc/combine_soldier/vo/cover.wav",
+        },
+
+        death = {
+            -- Silent on death (no sounds)
+        },
+
+        fall = {
+            "npc/metropolice/vo/shit.wav",
+        },
+
+        -- Social
+        greet = {
+            "npc/metropolice/vo/on1.wav",
+            "npc/metropolice/vo/on2.wav",
+        },
+
+        witness = {
+            "npc/metropolice/vo/holdit.wav",
+        },
+
+        assist = {
+            "npc/combine_soldier/vo/cover.wav",
+        },
+
+        -- Admin
+        admin = {
+            "npc/metropolice/vo/dispupdatingapb.wav",
+            "npc/combine_soldier/vo/alert1.wav",
+        },
+    }
+
+    print("[Experimental Players] Voice: Using default HL2 voice lines")
+
+    -- Try to import addon voice packs
+    timer.Simple(2, function()
+        local imported = ImportLambdaVoices() or ImportZetaVoices()
+
+        if imported then
+            print("[Experimental Players] Voice: Addon voice packs imported successfully!")
+        else
+            print("[Experimental Players] Voice: No addon voice packs found, using defaults only")
+        end
+    end)
+end
+
 --[[ Voice Initialization ]]--
 
 function PLAYER:InitializeVoice()
@@ -29,14 +173,28 @@ function PLAYER:PlayVoiceLine(voiceType, forcePitch)
     -- Check cooldown
     if CurTime() < self.exp_NextVoiceTime then return end
 
-    -- Get voice lines for this type
-    if !EXP.VoiceLines or !EXP.VoiceLines[voiceType] then
-        return
+    -- Filter voice lines by personality type if available
+    local voiceLines = EXP.VoiceLines[voiceType]
+    if self.GetPersonalityData then
+        local personalityData = self:GetPersonalityData()
+        if personalityData and personalityData.voiceType then
+            local personalityVoiceType = personalityData.voiceType
+            local filteredKey = voiceType .. "_" .. personalityVoiceType
+
+            -- Check if personality-specific voice lines exist
+            if EXP.VoiceLines[filteredKey] and #EXP.VoiceLines[filteredKey] > 0 then
+                voiceLines = EXP.VoiceLines[filteredKey]
+            end
+        end
     end
 
-    local voiceLines = EXP.VoiceLines[voiceType]
+    -- Validate voice lines exist
     if !voiceLines or #voiceLines == 0 then
-        return
+        -- Fallback to generic if personality-specific not found
+        voiceLines = EXP.VoiceLines[voiceType]
+        if !voiceLines or #voiceLines == 0 then
+            return
+        end
     end
 
     -- Pick random voice line

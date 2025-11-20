@@ -34,8 +34,10 @@ function TDM:Shutdown()
 	-- Announce winner
 	local winningTeam, score = EXP:GetWinningTeam()
 
-	if winningTeam then
+	if winningTeam and EXP.GameMode and EXP.GameMode.Teams then
 		local teamData = EXP.GameMode.Teams[ winningTeam ]
+		if !teamData then return end
+
 		for _, ply in ipairs( player.GetAll() ) do
 			if IsValid( ply ) then
 				ply:ChatPrint( "╔═══════════════════════════════════" )
@@ -61,8 +63,10 @@ function TDM:OnRoundEnd()
 	-- Announce winner
 	local winningTeam, score = EXP:GetWinningTeam()
 
-	if winningTeam then
+	if winningTeam and EXP.GameMode and EXP.GameMode.Teams then
 		local teamData = EXP.GameMode.Teams[ winningTeam ]
+		if !teamData then return end
+
 		for _, ply in ipairs( player.GetAll() ) do
 			if IsValid( ply ) then
 				ply:ChatPrint( "╔═══════════════════════════════════" )
@@ -76,6 +80,8 @@ function TDM:OnRoundEnd()
 end
 
 function TDM:Think()
+	if !EXP.GameMode or !EXP.GameMode.Teams then return end
+
 	-- Check score limit
 	for teamID, team in pairs( EXP.GameMode.Teams ) do
 		if ( team.score or 0 ) >= self.ScoreLimit then
@@ -89,9 +95,10 @@ end
 --[[ Kill Tracking ]]--
 
 hook.Add( "PlayerDeath", "EXP_TDM_TrackKills", function( victim, inflictor, attacker )
-	if !EXP.GameMode.Active then return end
-	if EXP.GameMode.Name != "TDM" then return end
+	if !EXP.GameMode or !EXP.GameMode.Active then return end
+	if EXP.GameMode.Name  ~=  "TDM" then return end
 	if !EXP.GameMode.RoundActive then return end
+	if !EXP.GameMode.Teams then return end
 
 	if !IsValid( attacker ) or !IsValid( victim ) then return end
 	if attacker == victim then return end  -- Suicide

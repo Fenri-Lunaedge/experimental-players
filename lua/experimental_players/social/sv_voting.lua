@@ -21,7 +21,7 @@ _EXP_VoteTimer = nil  -- Timer for vote duration
 
 function EXP_CreateVote( ply, title, options )
 	-- Check if vote already active
-	if _EXP_CurrentVote != "NIL" then
+	if _EXP_CurrentVote  ~=  "NIL" then
 		if IsValid( ply ) then
 			ply:ChatPrint( "[Experimental Players] Vote already in progress: " .. _EXP_CurrentVote )
 		end
@@ -294,7 +294,7 @@ hook.Add( "EXP_OnVoteDispatched", "EXP_BotVoting", function( initiator, title, o
 		-- Random delay before voting
 		local delay = math_random( 1, 8 )
 		timer.Simple( delay, function()
-			if IsValid( bot._PLY ) and _EXP_CurrentVote != "NIL" then
+			if IsValid( bot._PLY ) and _EXP_CurrentVote  ~=  "NIL" then
 				-- Pick random option
 				local randomOption = options[ math_random( #options ) ]
 				EXP_DispatchVote( bot._PLY, randomOption )

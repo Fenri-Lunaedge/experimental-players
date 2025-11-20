@@ -58,7 +58,7 @@ function FILE:ReadFile( filename, type, path )
     local str = f:Read( f:Size() )
     f:Close()
 
-    if str and #str != 0 then
+    if str and #str  ~=  0 then
         if type == "json" then
             str = util_JSONToTable( str ) or {}
         elseif type == "compressed" then
@@ -106,7 +106,7 @@ end
 function FILE:FileKeyIsValid( filename, key, type )
     if !file_Exists( filename, "DATA" ) then return false end
     local contents = FILE:ReadFile( filename, type, "DATA" )
-    return contents[ key ] != nil
+    return contents[ key ]  ~=  nil
 end
 
 function FILE:RemoveVarFromSQFile( filename, var, type )
@@ -124,7 +124,7 @@ end
 --[[ Directory Merging ]]--
 
 function FILE:MergeDirectory( dir, tbl, path, addDirs, addFunc )
-    if dir[ #dir ] != "/" then dir = dir .. "/" end
+    if dir[ #dir ]  ~=  "/" then dir = dir .. "/" end
     tbl = ( tbl or {} )
 
     local files, dirs = file_Find( dir .. "*", ( path or "GAME" ), "nameasc" )
@@ -277,7 +277,7 @@ end, false, "Updates the list of player profiles.", "Player Profiles" )
 FILE:CreateUpdateCommand( "proplist", function()
     local content = FILE:ReadFile( "experimental_players/proplist.json", "json" )
     if !content or #content == 0 then
-        ErrorNoHalt( "[Experimental Players] No props registered to spawn!" )
+        print( "[Experimental Players] Note: No custom props list found. Bots will use default props." )
     end
     EXP.SpawnlistProps = ( content or {} )
 end, false, "Updates the spawnlist of props the players can spawn from their spawnmenu.", "Spawnmenu Props" )
@@ -285,7 +285,7 @@ end, false, "Updates the spawnlist of props the players can spawn from their spa
 FILE:CreateUpdateCommand( "entitylist", function()
     local content = FILE:ReadFile( "experimental_players/entitylist.json", "json" )
     if !content or #content == 0 then
-        ErrorNoHalt( "[Experimental Players] No entities registered to spawn!" )
+        print( "[Experimental Players] Note: No custom entities list found. Entity spawning disabled." )
     end
     EXP.SpawnlistENTs = ( content or {} )
 end, false, "Updates the spawnlist of entities the players can spawn from their spawnmenu.", "Spawnmenu Entities" )
@@ -293,7 +293,7 @@ end, false, "Updates the spawnlist of entities the players can spawn from their 
 FILE:CreateUpdateCommand( "npclist", function()
     local content = FILE:ReadFile( "experimental_players/npclist.json", "json" )
     if !content or #content == 0 then
-        ErrorNoHalt( "[Experimental Players] No NPCs registered to spawn!" )
+        print( "[Experimental Players] Note: No custom NPCs list found. Bots will use default NPCs." )
     end
     EXP.SpawnlistNPCs = ( content or {} )
 end, false, "Updates the spawnlist of NPCs the players can spawn from their spawnmenu.", "Spawnmenu NPCs" )

@@ -9,6 +9,45 @@ Version: 1.0 (In Development)
 
 ---
 
+## Project Philosophy
+
+**Experimental Players** follows a core philosophy that guides all development decisions:
+
+### The Four Pillars
+
+1. **Zeta Players** = **WHAT** to implement
+   - Reference for feature completeness
+   - Most features but code is polluted
+   - Use to identify what capabilities bots should have
+
+2. **Lambda Players** = **HOW** to implement
+   - Reference for code quality and cleanliness
+   - Best organized codebase
+   - Use for implementation patterns and best practices
+
+3. **GLambda Players** = **WHERE** (Architecture)
+   - Foundation for our PlayerBot system
+   - Revolutionary use of real player entities
+   - Use for structural decisions and architecture
+
+4. **Experimental Players** = **Best of All + Innovation**
+   - Abstract the best from all three mods
+   - Add revolutionary improvements
+   - Goals: **Performance** + **Complexity** + **Configurability**
+
+### Development Principles
+
+✅ Performance must be excellent ("nossos bots devem performar bem")
+✅ High complexity and configurability ("altamente complexos e configuraveis")
+✅ Revolutionary approach ("abstrair o que há de melhor em todos, e revolucionar")
+✅ Clean code inspired by Lambda
+✅ GLambda architecture preserved
+✅ Zeta feature completeness
+
+**This philosophy is the primary directive for all development decisions.**
+
+---
+
 ## Table of Contents
 
 1. [Architecture Overview](#architecture-overview)

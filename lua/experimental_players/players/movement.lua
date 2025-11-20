@@ -33,6 +33,12 @@ function PLAYER:InitializeMovement()
     self.exp_InputAngles = self:EyeAngles()
     self.exp_InputForwardMove = 0
     self.exp_InputSideMove = 0
+
+    -- Ladder climbing
+    self:InitializeLadderClimbing()
+
+    -- Swimming
+    self:InitializeSwimming()
 end
 
 --[[ Main Movement Function ]]--
@@ -40,6 +46,12 @@ end
 function PLAYER:MoveToPos( pos, options )
     options = options or {}
     self:SetGoalTolerance( options.tolerance or 30 )
+
+    -- If currently underwater, use swimming instead
+    if self:IsInWater() then
+        local result = self:SwimToPos(pos, options.maxage or 15)
+        return result and "ok" or "failed"
+    end
 
     -- Compute path using navigator
     if !IsValid( self.Navigator ) then
@@ -99,9 +111,8 @@ function PLAYER:MoveToPos( pos, options )
         -- Update movement
         self:UpdateOnPath()
 
-        -- DEBUG: Check if path is still valid after UpdateOnPath
+        -- Check if path is still valid after UpdateOnPath
         if !self.Navigator:IsPathValid() then
-            print("[EXP] Path became invalid after UpdateOnPath!")
             pathResult = "path_invalid"
             break
         end
@@ -109,7 +120,6 @@ function PLAYER:MoveToPos( pos, options )
         coroutine_yield()
     end
 
-    print("[EXP] MoveToPos exited with result:", pathResult)
     self.exp_IsMoving = false
     self.exp_MoveSprint = false
     return pathResult
@@ -151,7 +161,14 @@ function PLAYER:UpdateOnPath()
     selfpos.z = 0
 
     local dist = selfpos:Distance( xypos )
-    if dist <= self.exp_GoalTolerance then
+    local tolerance = self.exp_GoalTolerance
+
+    -- Use larger tolerance for final segment
+    if curSegIndex == #allSegs then
+        tolerance = tolerance * 2  -- Double tolerance for final destination
+    end
+
+    if dist <= tolerance then
         -- Reached segment, go to next one
         if curSegIndex == #allSegs then
             -- Reached final destination!
@@ -163,7 +180,26 @@ function PLAYER:UpdateOnPath()
 
         -- Advance to next segment
         self.Navigator:IncrementSegment()
-        segment = allSegs[ self.Navigator:GetCurrentSegment() ]
+        local nextSegIndex = self.Navigator:GetCurrentSegment()
+
+        -- Bounds check after increment
+        if nextSegIndex > #allSegs then
+            -- Somehow went past the end, stop here
+            self.exp_IsMoving = false
+            self.Navigator:InvalidatePath()
+            self.exp_FollowPath_Pos = nil
+            return
+        end
+
+        segment = allSegs[ nextSegIndex ]
+        if !segment then
+            -- Segment doesn't exist, stop
+            self.exp_IsMoving = false
+            self.Navigator:InvalidatePath()
+            self.exp_FollowPath_Pos = nil
+            return
+        end
+
         goalPos = segment.pos
     end
 
@@ -186,6 +222,12 @@ function PLAYER:UpdateOnPath()
     else
         self.exp_MoveCrouch = false
     end
+
+    -- Handle ladders
+    self:CheckForLadder()
+
+    -- Handle swimming
+    self:UpdateSwimming()
 end
 
 --[[ Input-based Movement ]]--
@@ -228,21 +270,15 @@ function PLAYER:MoveTowards( pos )
         self.exp_InputSideMove = 0
     end
 
-    -- Sprint
-    if self.exp_MoveSprint then
-        self:SetButtonDown( IN_SPEED )
-    end
-
-    -- Crouch
-    if self.exp_MoveCrouch then
-        self:SetButtonDown( IN_DUCK )
-    end
+    -- Sprint and Crouch are now handled in SetupMove hook
 end
 
 function PLAYER:StopMoving()
     -- Clear all movement
     self:ClearButtons()
     self.exp_IsMoving = false
+    self.exp_InputForwardMove = 0
+    self.exp_InputSideMove = 0
 end
 
 function PLAYER:PressKey( key )
@@ -289,7 +325,7 @@ function PLAYER:SetCrouch( bool )
 end
 
 function PLAYER:IsSprinting()
-    return self.exp_MoveSprint or self:IsSprinting()
+    return self.exp_MoveSprint or false
 end
 
 --[[ Stuck Detection ]]--
@@ -343,6 +379,295 @@ end
 
 function PLAYER:GetMoveGoal()
     return self.exp_MovementGoal
+end
+
+--[[ Ladder Climbing System ]]--
+
+function PLAYER:CheckForLadder()
+    -- Check if we're near a ladder
+    local ladder = self:FindNearbyLadder()
+
+    if IsValid(ladder) then
+        -- Check if we need to climb up or down
+        local myPos = self:GetPos()
+        local ladderBottom = ladder:GetPos()
+        local ladderTop = ladder:GetPos() + Vector(0, 0, ladder:BoundingRadius() * 2)
+
+        -- If we're climbing a ladder, use the ladder climbing logic
+        if self:IsOnLadder() or self:ShouldMountLadder(ladder) then
+            self:ClimbLadder(ladder)
+        end
+    end
+end
+
+function PLAYER:FindNearbyLadder()
+    -- Search for ladders in a 150 unit radius
+    local nearbyEnts = ents.FindInSphere(self:GetPos(), 150)
+
+    for _, ent in ipairs(nearbyEnts) do
+        if ent:GetClass() == "func_useableladder" then
+            -- Check if ladder is in front of us
+            local toLadder = (ent:GetPos() - self:GetPos()):GetNormalized()
+            local forward = self:GetForward()
+
+            if toLadder:Dot(forward) > 0.5 then  -- 60 degree cone
+                return ent
+            end
+        end
+    end
+
+    return nil
+end
+
+function PLAYER:IsOnLadder()
+    -- Check if player is currently on a ladder (GMod provides this)
+    return self:GetMoveType() == MOVETYPE_LADDER
+end
+
+function PLAYER:ShouldMountLadder(ladder)
+    if !IsValid(ladder) then return false end
+
+    -- Check if we're close enough to mount
+    local dist = self:GetPos():Distance(ladder:GetPos())
+    if dist > 60 then return false end
+
+    -- Check if our goal is above or below us (need vertical movement)
+    if !self.exp_MovementGoal then return false end
+
+    local verticalDiff = self.exp_MovementGoal.z - self:GetPos().z
+
+    -- Need at least 100 units vertical difference to use ladder
+    if math.abs(verticalDiff) > 100 then
+        return true
+    end
+
+    return false
+end
+
+function PLAYER:ClimbLadder(ladder)
+    if !IsValid(ladder) then return end
+
+    -- Get ladder properties
+    local ladderPos = ladder:GetPos()
+    local ladderNormal = ladder:GetForward()
+
+    -- Align with ladder
+    local toLadder = (ladderPos - self:GetPos()):GetNormalized()
+    local alignAngle = toLadder:Angle()
+    self:SetEyeAngles(Angle(0, alignAngle.y, 0))
+    self.exp_InputAngles = Angle(0, alignAngle.y, 0)
+
+    -- Determine climb direction
+    if !self.exp_MovementGoal then return end
+
+    local verticalDiff = self.exp_MovementGoal.z - self:GetPos().z
+
+    if verticalDiff > 50 then
+        -- Climb UP
+        self:ClimbUp()
+    elseif verticalDiff < -50 then
+        -- Climb DOWN
+        self:ClimbDown()
+    else
+        -- At correct height, dismount
+        self:DismountLadder()
+    end
+end
+
+function PLAYER:ClimbUp()
+    -- Move forward on ladder (climbs up)
+    self.exp_InputForwardMove = 10000
+    self.exp_InputSideMove = 0
+
+    -- Look slightly up to help with climbing
+    local currentAng = self:EyeAngles()
+    self:SetEyeAngles(Angle(math.Clamp(currentAng.p + 5, -89, 89), currentAng.y, 0))
+end
+
+function PLAYER:ClimbDown()
+    -- Move backward on ladder (climbs down)
+    self.exp_InputForwardMove = -10000
+    self.exp_InputSideMove = 0
+
+    -- Look slightly down
+    local currentAng = self:EyeAngles()
+    self:SetEyeAngles(Angle(math.Clamp(currentAng.p - 5, -89, 89), currentAng.y, 0))
+end
+
+function PLAYER:DismountLadder()
+    -- Move forward to get off ladder
+    self.exp_InputForwardMove = 10000
+    self.exp_InputSideMove = 0
+
+    -- Small delay before resuming normal movement
+    self.exp_LadderDismountTime = CurTime() + 0.5
+end
+
+function PLAYER:InitializeLadderClimbing()
+    self.exp_OnLadder = false
+    self.exp_LadderEntity = nil
+    self.exp_LadderDismountTime = 0
+end
+
+--[[ Swimming System ]]--
+
+function PLAYER:InitializeSwimming()
+    self.exp_IsSwimming = false
+    self.exp_SwimTarget = nil
+    self.exp_SwimSurfaceTime = 0
+    self.exp_LastAirTime = CurTime()
+end
+
+-- Check if bot is in water
+function PLAYER:IsInWater()
+    return self:WaterLevel() >= 2
+end
+
+-- Check if bot needs air
+function PLAYER:NeedsAir()
+    if !self:IsInWater() then
+        self.exp_LastAirTime = CurTime()
+        return false
+    end
+
+    -- Check breath meter (players drown after ~10 seconds underwater)
+    local underwaterTime = CurTime() - self.exp_LastAirTime
+    return underwaterTime > 8  -- Surface before drowning
+end
+
+-- Swim towards position
+function PLAYER:SwimTowards(pos)
+    if !self:IsInWater() then return end
+
+    local myPos = self:GetPos()
+    local dir = (pos - myPos):GetNormalized()
+    local targetAng = dir:Angle()
+
+    -- Smooth angle transition
+    local currentAng = self:EyeAngles()
+    local newAng = LerpAngle(0.15, currentAng, targetAng)
+    self:SetEyeAngles(newAng)
+
+    -- Swimming uses forward movement
+    self.exp_InputForwardMove = 10000
+    self.exp_InputSideMove = 0
+
+    -- Jump button swims upward
+    if dir.z > 0.3 then
+        self:SetButtonDown(IN_JUMP)
+    else
+        self:SetButtonUp(IN_JUMP)
+    end
+
+    -- Duck button swims downward
+    if dir.z < -0.3 then
+        self:SetButtonDown(IN_DUCK)
+    else
+        self:SetButtonUp(IN_DUCK)
+    end
+end
+
+-- Surface for air
+function PLAYER:SwimToSurface()
+    if !self:IsInWater() then return end
+
+    -- Find water surface
+    local myPos = self:GetPos()
+    local trace = util_TraceLine({
+        start = myPos,
+        endpos = myPos + Vector(0, 0, 10000),
+        filter = self,
+        mask = MASK_WATER
+    })
+
+    if trace.Hit then
+        local surfacePos = trace.HitPos - Vector(0, 0, 20)  -- Just below surface
+        self:SwimTowards(surfacePos)
+        return true
+    end
+
+    -- If trace failed, just swim upward
+    local upPos = myPos + Vector(0, 0, 500)
+    self:SwimTowards(upPos)
+    return false
+end
+
+-- Handle underwater navigation
+function PLAYER:UpdateSwimming()
+    if !self:IsInWater() then
+        self.exp_IsSwimming = false
+        return
+    end
+
+    self.exp_IsSwimming = true
+
+    -- Check if we need air
+    if self:NeedsAir() then
+        self:SwimToSurface()
+        return
+    end
+
+    -- If we have a swim target, swim towards it
+    if self.exp_SwimTarget then
+        local targetPos = self.exp_SwimTarget
+        local dist = self:GetPos():Distance(targetPos)
+
+        if dist < 50 then
+            -- Reached target
+            self.exp_SwimTarget = nil
+        else
+            self:SwimTowards(targetPos)
+        end
+    end
+end
+
+-- Navigate through water to destination
+function PLAYER:SwimToPos(pos, timeout)
+    if !self:IsInWater() then return false end
+
+    self.exp_SwimTarget = pos
+    local startTime = CurTime()
+    timeout = timeout or 15
+
+    while IsValid(self) and self:IsInWater() do
+        self:UpdateSwimming()
+
+        -- Check if reached
+        if !self.exp_SwimTarget then
+            return true  -- Success
+        end
+
+        -- Check timeout
+        if CurTime() - startTime > timeout then
+            self.exp_SwimTarget = nil
+            return false  -- Timeout
+        end
+
+        -- Check if need air (priority override)
+        if self:NeedsAir() then
+            return false  -- Must surface
+        end
+
+        coroutine_yield()
+    end
+
+    self.exp_SwimTarget = nil
+    return false
+end
+
+-- Check if path requires swimming
+function PLAYER:PathRequiresSwimming(targetPos)
+    -- Trace from current position to target
+    local myPos = self:GetPos() + Vector(0, 0, 32)
+    local trace = util_TraceLine({
+        start = myPos,
+        endpos = targetPos + Vector(0, 0, 32),
+        filter = self,
+        mask = MASK_WATER
+    })
+
+    -- If trace hits water, swimming required
+    return trace.StartSolid or trace.HitTexture == "**water**" or trace.MatType == MAT_SLOSH
 end
 
 print( "[Experimental Players] Movement system loaded" )

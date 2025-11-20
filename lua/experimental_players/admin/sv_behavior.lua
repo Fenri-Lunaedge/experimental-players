@@ -7,9 +7,17 @@ if ( CLIENT ) then return end
 local IsValid = IsValid
 local math_random = math.random
 local CurTime = CurTime
-local coroutine_wait = coroutine.wait
+local coroutine_yield = coroutine.yield
 
 local PLAYER = EXP.Player
+
+-- Coroutine wait helper
+local function coroutine_wait(seconds)
+    local waitUntil = CurTime() + seconds
+    while CurTime() < waitUntil do
+        coroutine_yield()
+    end
+end
 
 --[[ Admin States ]]--
 
@@ -189,16 +197,16 @@ function PLAYER:Admin_RandomCommand()
 	local commands = {
 		-- Self commands
 		function()
-			self:COMMAND_SetHealth( self._PLY, math_random( 100, 200 ) )
+			self:COMMAND_SetHealth( self, math_random( 100, 200 ) )
 		end,
 		function()
-			self:COMMAND_SetArmor( self._PLY, math_random( 100, 255 ) )
+			self:COMMAND_SetArmor( self, math_random( 100, 255 ) )
 		end,
 		function()
 			if !self.exp_InGodmode then
-				self:COMMAND_Godmode( self._PLY )
+				self:COMMAND_Godmode( self )
 			else
-				self:COMMAND_UnGod( self._PLY )
+				self:COMMAND_UnGod( self )
 			end
 		end,
 
@@ -207,7 +215,7 @@ function PLAYER:Admin_RandomCommand()
 			local players = player.GetAll()
 			if #players > 0 then
 				local target = players[ math_random( #players ) ]
-				if IsValid( target ) and target != self._PLY then
+				if IsValid( target ) and target  ~=  self then
 					self:COMMAND_Goto( target )
 				end
 			end
@@ -250,13 +258,16 @@ hook.Add( "PlayerDeath", "EXP_DetectRDM", function( victim, inflictor, attacker 
 
 	for _, bot in ipairs( EXP.ActiveBots ) do
 		if !IsValid( bot._PLY ) then continue end
-		if !bot.exp_IsAdmin then continue end
+
+		local ply = bot._PLY  -- Extract entity from wrapper
+
+		if !ply.exp_IsAdmin then continue end
 
 		-- Random chance to notice (50%)
 		if math_random( 1, 100 ) > 50 then continue end
 
 		-- Set rule data
-		bot.exp_CurrentRuleData = {
+		ply.exp_CurrentRuleData = {
 			offender = attacker,
 			victim = victim,
 			inflictor = inflictor,
@@ -264,9 +275,9 @@ hook.Add( "PlayerDeath", "EXP_DetectRDM", function( victim, inflictor, attacker 
 		}
 
 		-- Enter admin duty state
-		bot:SetState( "AdminDuty" )
+		ply:SetState( "AdminDuty" )
 
-		print( "[Experimental Players] Admin " .. bot._PLY:Nick() .. " detected RDM by " .. attacker:Nick() )
+		print( "[Experimental Players] Admin " .. ply:Nick() .. " detected RDM by " .. attacker:Nick() )
 		break  -- Only one admin handles it
 	end
 end )
@@ -276,7 +287,7 @@ hook.Add( "PlayerDeath", "EXP_DetectPropKill", function( victim, inflictor, atta
 	if !IsValid( victim ) or !IsValid( inflictor ) then return end
 
 	-- Check if killed by prop
-	if inflictor:GetClass() != "prop_physics" then return end
+	if inflictor:GetClass()  ~=  "prop_physics" then return end
 
 	-- Find owner of prop
 	local owner = inflictor.exp_Owner
@@ -287,13 +298,16 @@ hook.Add( "PlayerDeath", "EXP_DetectPropKill", function( victim, inflictor, atta
 
 	for _, bot in ipairs( EXP.ActiveBots ) do
 		if !IsValid( bot._PLY ) then continue end
-		if !bot.exp_IsAdmin then continue end
+
+		local ply = bot._PLY  -- Extract entity from wrapper
+
+		if !ply.exp_IsAdmin then continue end
 
 		-- Random chance to notice (60%)
 		if math_random( 1, 100 ) > 60 then continue end
 
 		-- Set rule data
-		bot.exp_CurrentRuleData = {
+		ply.exp_CurrentRuleData = {
 			offender = owner,
 			victim = victim,
 			inflictor = inflictor,
@@ -301,9 +315,9 @@ hook.Add( "PlayerDeath", "EXP_DetectPropKill", function( victim, inflictor, atta
 		}
 
 		-- Enter admin duty state
-		bot:SetState( "AdminDuty" )
+		ply:SetState( "AdminDuty" )
 
-		print( "[Experimental Players] Admin " .. bot._PLY:Nick() .. " detected prop kill by " .. owner:Nick() )
+		print( "[Experimental Players] Admin " .. ply:Nick() .. " detected prop kill by " .. owner:Nick() )
 		break
 	end
 end )

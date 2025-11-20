@@ -28,6 +28,65 @@ local hook_GetTable = hook.GetTable
 local ErrorNoHaltWithStack = ErrorNoHaltWithStack
 local unpack = unpack
 
+--[[ Attachment Point System ]]--
+-- Based on Lambda Players attachment system
+
+function EXP:GetAttachmentPoint( ent, pointType )
+    if !IsValid( ent ) then return nil end
+
+    local attachData = {
+        Pos = ent:WorldSpaceCenter(),
+        Ang = ent:GetAngles(),
+        Index = 0,
+        Bone = nil
+    }
+
+    if pointType == "hand" then
+        -- Try right hand attachment first (preferred method)
+        local lookup = ent:LookupAttachment( "anim_attachment_RH" )
+        if lookup and lookup > 0 then
+            local handAttach = ent:GetAttachment( lookup )
+            if handAttach then
+                attachData.Pos = handAttach.Pos
+                attachData.Ang = handAttach.Ang
+                attachData.Index = lookup
+                return attachData
+            end
+        end
+
+        -- Fallback to right hand bone
+        local bone = ent:LookupBone( "ValveBiped.Bip01_R_Hand" )
+        if bone then
+            local bonePos, boneAng = ent:GetBonePosition( bone )
+            if bonePos then
+                attachData.Pos = bonePos
+                attachData.Ang = boneAng
+                attachData.Bone = bone
+            end
+        end
+    elseif pointType == "eyes" then
+        -- Try eyes attachment first
+        local lookup = ent:LookupAttachment( "eyes" )
+        if lookup and lookup > 0 then
+            local eyeAttach = ent:GetAttachment( lookup )
+            if eyeAttach then
+                attachData.Pos = eyeAttach.Pos
+                attachData.Ang = eyeAttach.Ang
+                attachData.Index = lookup
+                return attachData
+            end
+        end
+
+        -- Fallback: use player eye position
+        if ent:IsPlayer() then
+            attachData.Pos = ent:EyePos()
+            attachData.Ang = ent:EyeAngles()
+        end
+    end
+
+    return attachData
+end
+
 --[[ Player Models ]]--
 
 if ( SERVER ) then
@@ -132,7 +191,7 @@ if ( SERVER ) then
         for _, mdl in pairs( player_manager_AllValidModels() ) do
             local isDefaultMdl = false
             for _, defMdl in ipairs( self.PlayerModels.Default ) do
-                if mdl != defMdl then continue end
+                if mdl  ~=  defMdl then continue end
                 isDefaultMdl = true; break
             end
             if isDefaultMdl then continue end
@@ -140,7 +199,7 @@ if ( SERVER ) then
             if blockList then
                 local isBlocked = false
                 for k, blockedMdl in ipairs( blockList ) do
-                    if mdl != blockedMdl then continue end
+                    if mdl  ~=  blockedMdl then continue end
                     table_remove( blockList, k )
                     isBlocked = true; break
                 end
@@ -172,7 +231,7 @@ if ( SERVER ) then
             local onlyAddons = self:GetConVar( "player_onlyaddonpms" )
             if onlyAddons and onlyAddons == 1 then
                 mdlList = mdlTbl.Addons
-                if #mdlList != 0 then return EXP:Random( mdlList ) end
+                if #mdlList  ~=  0 then return EXP:Random( mdlList ) end
             end
 
             mdlCount = ( mdlCount + #mdlTbl.Addons )
@@ -262,7 +321,7 @@ end
 function EXP:SendNotification( ply, text, notifyType, length, snd )
     if ( CLIENT ) then
         notification_AddLegacy( text, ( notifyType or 0 ), ( length or 3 ) )
-        if snd and #snd != 0 then surface_PlaySound( snd ) end
+        if snd and #snd  ~=  0 then surface_PlaySound( snd ) end
     end
     if ( SERVER ) then
         net_Start( "exp_sendnotify" )

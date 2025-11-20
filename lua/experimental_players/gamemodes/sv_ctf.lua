@@ -359,7 +359,7 @@ end
 
 hook.Add( "PlayerDeath", "EXP_CTF_DropFlag", function( victim, inflictor, attacker )
 	if !EXP.GameMode.Active then return end
-	if EXP.GameMode.Name != "CTF" then return end
+	if EXP.GameMode.Name  ~=  "CTF" then return end
 	if !IsValid( victim ) then return end
 
 	-- Check if victim was carrying a flag
@@ -377,7 +377,7 @@ end )
 -- Make bots go for enemy flag
 hook.Add( "Think", "EXP_CTF_BotAI", function()
 	if !EXP.GameMode.Active then return end
-	if EXP.GameMode.Name != "CTF" then return end
+	if EXP.GameMode.Name  ~=  "CTF" then return end
 	if !EXP.GameMode.RoundActive then return end
 	if !EXP.ActiveBots then return end
 
@@ -414,7 +414,7 @@ hook.Add( "Think", "EXP_CTF_BotAI", function()
 		if carryingFlag then continue end
 
 		-- Check if idle or wandering
-		if bot.exp_State != "Idle" and bot.exp_State != "Wander" then continue end
+		if bot.exp_State  ~=  "Idle" and bot.exp_State  ~=  "Wander" then continue end
 
 		-- Go for enemy flag
 		local botTeam = EXP:GetPlayerTeam( bot._PLY )
