@@ -179,10 +179,7 @@ function EXP:InitializeBot( ply, glace )
         ply:InitializeVoice()
     end
 
-    -- Initialize building
-    if ply.InitializeBuilding then
-        ply:InitializeBuilding()
-    end
+    -- FIX: Removed duplicate InitializeBuilding call
 
     -- Initialize admin
     if ply.InitializeAdmin then
@@ -321,11 +318,17 @@ function PLAYER:Think()
     if self.exp_ThreadDisabled then return end  -- Thread disabled due to too many deaths
 
     if self._Thread then
+        -- FIX: Prevent race condition with thread lock
+        if self.exp_ThreadResuming then return end  -- Already resuming, skip this tick
+
         -- Check coroutine status before resuming
         local status = coroutine.status( self._Thread )
 
         if status == "suspended" then
+            self.exp_ThreadResuming = true  -- Lock
             local ok, err = coroutine_resume( self._Thread )
+            self.exp_ThreadResuming = false  -- Unlock
+
             if !ok then
                 ErrorNoHaltWithStack( "[Experimental Players] Thread error: " .. tostring( err ) )
             end
@@ -397,6 +400,12 @@ function PLAYER:SetState( newState )
     if oldState == "Combat" then
         self.exp_NextStrafeTime = nil
         self.exp_CombatStartTime = nil
+        -- FIX: Also cleanup cover data when leaving combat
+        if self.IsInCover and self:IsInCover() then
+            if self.LeaveCover then
+                self:LeaveCover()
+            end
+        end
     elseif oldState == "Retreat" then
         self.exp_RetreatEndTime = nil
         self.exp_RetreatingFrom = nil
@@ -489,6 +498,20 @@ function PLAYER:State_Combat()
 
     local enemy = self.exp_Enemy
     local dist = self:GetPos():Distance( enemy:GetPos() )
+
+    -- FIX: If we can't see enemy but know their last position, pursue it
+    if !self:CanSeeEntity(enemy) and self.exp_LastKnownEnemyPos then
+        local lastKnownDist = self:GetPos():Distance(self.exp_LastKnownEnemyPos)
+
+        -- Only pursue if not too far (within 1500 units)
+        if lastKnownDist < 1500 then
+            if self.MoveTowards then
+                self:MoveTowards(self.exp_LastKnownEnemyPos)
+            end
+            CoroutineWait(self, 0.2)
+            return
+        end
+    end
 
     -- Get weapon data
     local weaponData = self:GetCurrentWeaponData()

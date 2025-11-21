@@ -64,7 +64,10 @@ if ( SERVER ) then
     end
 
     function ENT:IncrementSegment()
-        if self.currentSegment then
+        -- FIX: Initialize if nil and add bounds checking
+        if !self.currentSegment then
+            self.currentSegment = 1
+        else
             self.currentSegment = self.currentSegment + 1
         end
     end
@@ -79,7 +82,22 @@ if ( SERVER ) then
     end
 
     function ENT:AdvanceSegment()
-        self.currentSegment = self.currentSegment + 1
+        -- FIX: Add bounds checking to prevent overflow
+        if !self.currentSegment then
+            self.currentSegment = 1
+            return
+        end
+
+        -- Check if we have a valid path with segments
+        if self.path and self.path:IsValid() then
+            local segments = self.path:GetAllSegments()
+            if segments and self.currentSegment < #segments then
+                self.currentSegment = self.currentSegment + 1
+            end
+        else
+            -- No path or invalid, don't increment
+            self.currentSegment = self.currentSegment + 1  -- Still increment for fallback compatibility
+        end
     end
 
     function ENT:RecomputePath()

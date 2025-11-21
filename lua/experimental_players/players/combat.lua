@@ -13,6 +13,14 @@ local Vector = Vector
 
 local PLAYER = EXP.Player
 
+-- FIX: Protected states as constant to avoid recreation every frame
+local PROTECTED_STATES = {
+    ["Retreat"] = true,
+    ["AdminDuty"] = true,
+    ["UsingCommand"] = true,
+    ["Jailed"] = true
+}
+
 --[[ Combat Initialization ]]--
 
 function PLAYER:InitializeCombat()
@@ -122,12 +130,15 @@ function PLAYER:CanSeeEntity(ent)
 end
 
 function PLAYER:FindEnemies()
+    -- FIX: Scan more frequently during combat for better reactivity
+    local scanInterval = self.exp_State == "Combat" and 0.5 or 1  -- 0.5s in combat, 1s otherwise
+
     -- Scan for enemies periodically
     if CurTime() < self.exp_NextTargetScanTime then
         return self.exp_Enemy  -- Return current enemy
     end
 
-    self.exp_NextTargetScanTime = CurTime() + 1  -- Scan every second
+    self.exp_NextTargetScanTime = CurTime() + scanInterval
 
     -- Find entities in range
     local pos = self:GetPos()
@@ -169,10 +180,21 @@ function PLAYER:UpdateEnemy()
     if IsValid(enemy) then
         self.exp_Enemy = enemy
         self.exp_LastSeenEnemy = CurTime()
+        self.exp_LastKnownEnemyPos = enemy:GetPos()  -- Track last known position
     else
-        -- Lost enemy after timeout
-        if CurTime() - self.exp_LastSeenEnemy > 5 then
-            self.exp_Enemy = nil
+        -- FIX: Don't immediately forget enemy, try to pursue last known position
+        if self.exp_Enemy and IsValid(self.exp_Enemy) then
+            local timeSinceLastSeen = CurTime() - self.exp_LastSeenEnemy
+
+            -- Check if enemy is still nearby (within 2000 units)
+            local dist = self:GetPos():Distance(self.exp_Enemy:GetPos())
+
+            if timeSinceLastSeen > 10 or dist > 2000 then
+                -- Enemy really gone, forget them
+                self.exp_Enemy = nil
+                self.exp_LastKnownEnemyPos = nil
+            end
+            -- Otherwise keep tracking them even without LOS
         end
     end
 
@@ -478,9 +500,12 @@ function PLAYER:Think_Combat()
     -- Always update enemy detection
     self:UpdateEnemy()
 
-    -- Switch to combat state if we have an enemy
+    -- Switch to combat state if we have an enemy (unless in protected state)
     if IsValid(self.exp_Enemy) and self.exp_State  ~=  "Combat" then
-        self:SetState("Combat")
+        -- Use constant protected states table
+        if !PROTECTED_STATES[self.exp_State] then
+            self:SetState("Combat")
+        end
     end
 end
 
@@ -553,7 +578,8 @@ hook.Add("EntityTakeDamage", "EXP_OnBotDamaged", function(target, dmg)
     end
 
     -- Play pain sound
-    if target.Voice_Panic and damage >= 50 then
+    -- FIX: Type check to ensure Voice_Panic is a function
+    if type(target.Voice_Panic) == "function" and damage >= 50 then
         -- Panic voice for heavy damage
         target:Voice_Panic()
     end

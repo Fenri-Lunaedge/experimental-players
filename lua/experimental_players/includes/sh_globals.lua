@@ -34,6 +34,9 @@ local unpack = unpack
 function EXP:GetAttachmentPoint( ent, pointType )
     if !IsValid( ent ) then return nil end
 
+    -- FIX: Update bones before getting attachments to ensure accurate positions
+    ent:SetupBones()
+
     local attachData = {
         Pos = ent:WorldSpaceCenter(),
         Ang = ent:GetAngles(),

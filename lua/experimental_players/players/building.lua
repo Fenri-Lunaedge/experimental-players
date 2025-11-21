@@ -73,8 +73,9 @@ end
 --[[ Prop Spawning ]]--
 
 function PLAYER:SpawnProp(model, pos, ang, freeze)
-    if !self:IsUnderLimit("Prop") then return end
-    if !EXP:GetConVar("building_enabled") then return end
+    -- FIX: Return false instead of nil for consistency
+    if !self:IsUnderLimit("Prop") then return false end
+    if !EXP:GetConVar("building_enabled") then return false end
 
     -- Get spawn position and angle with precision
     local spawnPos, spawnAng
@@ -157,8 +158,9 @@ end
 --[[ Entity Spawning ]]--
 
 function PLAYER:SpawnEntity()
-    if !self:IsUnderLimit("Entity") then return end
-    if !EXP:GetConVar("building_enabled") then return end
+    -- FIX: Return false instead of nil for consistency
+    if !self:IsUnderLimit("Entity") then return false end
+    if !EXP:GetConVar("building_enabled") then return false end
 
     -- Get spawn position
     local trace = util_TraceLine({
@@ -201,8 +203,9 @@ end
 --[[ NPC Spawning ]]--
 
 function PLAYER:SpawnNPC()
-    if !self:IsUnderLimit("NPC") then return end
-    if !EXP:GetConVar("building_enabled") then return end
+    -- FIX: Return false instead of nil for consistency
+    if !self:IsUnderLimit("NPC") then return false end
+    if !EXP:GetConVar("building_enabled") then return false end
 
     -- Get spawn position
     local trace = util_TraceLine({
@@ -280,7 +283,26 @@ function PLAYER:DuplicateProp(originalProp)
     if !self:IsUnderLimit("Prop") then return nil end
 
     local model = originalProp:GetModel()
-    local pos = originalProp:GetPos() + Vector(50, 0, 0) -- Offset to side
+
+    -- FIX: Validate spawn position with trace
+    local offsetDir = originalProp:GetRight() * 50 -- Try to side
+    local testPos = originalProp:GetPos() + offsetDir
+
+    -- Check if position is valid (not in wall)
+    local trace = util.TraceLine({
+        start = originalProp:GetPos(),
+        endpos = testPos,
+        filter = {self, originalProp},
+        mask = MASK_SOLID
+    })
+
+    -- If blocked, try above instead
+    if trace.Hit then
+        offsetDir = Vector(0, 0, 50)
+        testPos = originalProp:GetPos() + offsetDir
+    end
+
+    local pos = testPos
     local ang = originalProp:GetAngles()
 
     -- Spawn duplicate
@@ -338,9 +360,16 @@ function PLAYER:BuildWall(width, height, model)
 
     local props = {}
 
+    -- FIX: Use proper double break or goto to exit both loops
+    local shouldStop = false
     for h = 1, height do
+        if shouldStop then break end
+
         for w = 1, width do
-            if !self:IsUnderLimit("Prop") then break end
+            if !self:IsUnderLimit("Prop") then
+                shouldStop = true
+                break
+            end
 
             local offset = rightVec * (w - 1) * 50 + Vector(0, 0, (h - 1) * 50)
             local pos = startPos + offset

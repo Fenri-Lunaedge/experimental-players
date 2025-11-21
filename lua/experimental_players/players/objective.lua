@@ -218,13 +218,37 @@ function PLAYER:Objective_CapturePoint(objective)
         -- Stay on point to capture
         local captureTime = objective.captureTime or 5
         local startTime = CurTime()
+        local offPointAttempts = 0
+        local maxOffPointAttempts = 3  -- FIX: Limit recursion attempts
 
         while CurTime() - startTime < captureTime do
             -- Check if still on point
             local dist = self:GetPos():Distance(pointPos)
             if dist > (objective.captureRadius or 150) then
-                -- Moved off point, restart
-                return self:Objective_CapturePoint(objective)
+                -- Moved off point
+                offPointAttempts = offPointAttempts + 1
+
+                if offPointAttempts >= maxOffPointAttempts then
+                    -- Failed too many times, give up
+                    print("[EXP] " .. self:Nick() .. " failed to stay on capture point after " .. offPointAttempts .. " attempts")
+                    return false
+                end
+
+                -- Try to get back on point
+                print("[EXP] " .. self:Nick() .. " moved off point, repositioning... (attempt " .. offPointAttempts .. "/" .. maxOffPointAttempts .. ")")
+                local reposition = self:MoveToPos(pointPos, {
+                    tolerance = objective.captureRadius or 150,
+                    sprint = false,
+                    maxage = 5
+                })
+
+                if reposition ~= "ok" then
+                    -- Can't get back to point
+                    return false
+                end
+
+                -- Reset timer since we had to reposition
+                startTime = CurTime()
             end
 
             -- Check for enemies

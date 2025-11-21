@@ -110,12 +110,16 @@ EXP.Personalities = {
         name = "Joker",
         description = "Unpredictable, chatty, loves memes",
 
+        -- FIX: Mark as dynamic so values are generated per-bot
+        isDynamic = true,
+
         combatStyle = {
-            retreatThreshold = math.random(20, 70) / 100,  -- Random!
-            aggressionMult = math.random(50, 150) / 100,
-            coverUsage = math.random(20, 80) / 100,
-            strafeFrequency = math.random(50, 150) / 100,
-            reloadInCombat = math.random() > 0.5,
+            -- These will be populated dynamically in AssignPersonality
+            retreatThreshold = nil,
+            aggressionMult = nil,
+            coverUsage = nil,
+            strafeFrequency = nil,
+            reloadInCombat = nil,
         },
 
         chatStyle = {
@@ -207,6 +211,19 @@ function PLAYER:AssignPersonality(personalityName)
 
     self.exp_Personality = personalityName
     self.exp_PersonalityData = table.Copy(EXP.Personalities[personalityName])
+
+    -- FIX: Generate dynamic values for Joker personality
+    if personalityName == "joker" and self.exp_PersonalityData.isDynamic then
+        self.exp_PersonalityData.combatStyle.retreatThreshold = math.random(20, 70) / 100
+        self.exp_PersonalityData.combatStyle.aggressionMult = math.random(50, 150) / 100
+        self.exp_PersonalityData.combatStyle.coverUsage = math.random(20, 80) / 100
+        self.exp_PersonalityData.combatStyle.strafeFrequency = math.random(50, 150) / 100
+        self.exp_PersonalityData.combatStyle.reloadInCombat = math.random() > 0.5
+
+        print("[EXP] " .. self:Nick() .. " got unique Joker values: retreat=" ..
+            math.Round(self.exp_PersonalityData.combatStyle.retreatThreshold * 100) .. "%, aggr=" ..
+            math.Round(self.exp_PersonalityData.combatStyle.aggressionMult * 100) .. "%")
+    end
 
     print("[EXP] " .. self:Nick() .. " assigned personality: " .. self.exp_PersonalityData.name)
 end

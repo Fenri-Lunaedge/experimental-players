@@ -18,6 +18,12 @@ local PLAYER = EXP.Player
 --[[ Weapon Entity Management ]]--
 
 function PLAYER:CreateWeaponEntity()
+    -- FIX: Remove old weapon entity if it exists but is not properly referenced
+    if IsValid(self.exp_WeaponEntity) then
+        self.exp_WeaponEntity:Remove()
+        self.exp_WeaponEntity = nil
+    end
+
     local wepEnt = ents_Create( "base_anim" )
     if !IsValid( wepEnt ) then return end
 
@@ -36,20 +42,29 @@ function PLAYER:CreateWeaponEntity()
     wepEnt:Spawn()
     wepEnt:Activate()
 
-    -- Parent to player WITH attachment index (this is critical!)
+    -- FIX: Parent to player WITH attachment index with validation
+    local parentSuccess = false
     if attachPoint and attachPoint.Index > 0 then
         wepEnt:SetParent( self, attachPoint.Index )
-    else
+        -- Validate parenting succeeded
+        if wepEnt:GetParent() == self then
+            parentSuccess = true
+        end
+    end
+
+    if !parentSuccess then
+        -- Fallback: parent without attachment
         wepEnt:SetParent( self )
-        -- Fallback: follow bone if attachment failed
+        -- Then try follow bone if available
         if attachPoint and attachPoint.Bone then
             wepEnt:FollowBone( self, attachPoint.Bone )
         end
     end
 
-    -- Don't enable bonemerge yet - weapon data will control this
-    wepEnt:SetLocalPos( Vector( 0, 0, 0 ) )
-    wepEnt:SetLocalAngles( Angle( 0, 0, 0 ) )
+    -- FIX: Don't reset offsets here - they will be set by weapon data
+    -- Store default offsets for restoration
+    wepEnt.exp_DefaultOffPos = Vector( 0, 0, 0 )
+    wepEnt.exp_DefaultOffAng = Angle( 0, 0, 0 )
 
     wepEnt:DrawShadow( false )
     wepEnt:SetNoDraw( false )  -- Will be controlled by weapon data
@@ -63,14 +78,62 @@ function PLAYER:CreateWeaponEntity()
     end
 
     self.exp_WeaponEntity = wepEnt
+    self.exp_WeaponEntityLastCheck = CurTime()
+
+    -- Apply current weapon offsets if we have a weapon equipped
+    if self.exp_Weapon and self.exp_Weapon ~= "none" then
+        self:UpdateWeaponOffsets()
+    end
+
     return wepEnt
 end
 
 function PLAYER:GetWeaponENT()
-    if !IsValid( self.exp_WeaponEntity ) then
+    -- FIX: Validate weapon entity integrity
+    if !IsValid( self.exp_WeaponEntity ) or self.exp_WeaponEntity:GetParent() != self then
+        -- Weapon is invalid or became unparented, recreate it
+        if IsValid( self.exp_WeaponEntity ) then
+            self.exp_WeaponEntity:Remove()
+        end
         self:CreateWeaponEntity()
     end
     return self.exp_WeaponEntity
+end
+
+-- FIX: New function to update weapon offsets
+function PLAYER:UpdateWeaponOffsets()
+    local wepEnt = self.exp_WeaponEntity
+    if !IsValid(wepEnt) then return end
+
+    if self.exp_Weapon and self.exp_Weapon ~= "none" then
+        local weaponData = EXP:GetWeaponData( self.exp_Weapon )
+        if weaponData then
+            wepEnt:SetLocalPos( weaponData.offpos or Vector( 0, 0, 0 ) )
+            wepEnt:SetLocalAngles( weaponData.offang or Angle( 0, 0, 0 ) )
+        end
+    end
+end
+
+-- FIX: Think function to validate and repair weapon entity
+function PLAYER:Think_WeaponEntity()
+    -- Only check every 1 second to save performance
+    if !self.exp_WeaponEntityLastCheck or CurTime() - self.exp_WeaponEntityLastCheck > 1 then
+        self.exp_WeaponEntityLastCheck = CurTime()
+
+        local wepEnt = self.exp_WeaponEntity
+        if IsValid(wepEnt) then
+            -- Check if weapon is still properly parented
+            if wepEnt:GetParent() != self then
+                print("[EXP] WARNING: " .. self:Nick() .. "'s weapon became unparented, recreating...")
+                wepEnt:Remove()
+                self:CreateWeaponEntity()
+            end
+        elseif self:Alive() then
+            -- Weapon entity doesn't exist but bot is alive, recreate it
+            print("[EXP] WARNING: " .. self:Nick() .. "'s weapon entity missing, recreating...")
+            self:CreateWeaponEntity()
+        end
+    end
 end
 
 --[[ Weapon Switching ]]--
@@ -84,7 +147,16 @@ function PLAYER:SwitchWeapon( weaponName, forceSwitch )
 
     -- Check if we can switch
     if !forceSwitch and self.exp_NoWeaponSwitch then return false end
-    if self.exp_Weapon == weaponName then return false end  -- Already have it
+
+    -- FIX: Don't allow weapon switch during reload (unless forced)
+    if !forceSwitch and self.exp_IsReloading then
+        return false
+    end
+
+    -- FIX: If switching to same weapon, preserve ammo
+    if self.exp_Weapon == weaponName then
+        return false  -- Already have it, don't reset
+    end
 
     -- Cancel any pending auto-reload timer
     local timerName = "EXP_AutoReload_" .. self:EntIndex()
@@ -123,7 +195,42 @@ function PLAYER:SwitchWeapon( weaponName, forceSwitch )
     self.exp_CombatAttackRange = newData.attackrange or 100
     self.exp_WeaponNoDraw = newData.nodraw or false
     self.exp_WeaponSpeedMultiplier = newData.speedmultiplier or 1
-    self.exp_Clip = newData.clip or -1
+
+    -- FIX: Preserve ammo if switching back to same weapon type
+    -- Store ammo per weapon in a table
+    if !self.exp_WeaponAmmoStorage then
+        self.exp_WeaponAmmoStorage = {}
+    end
+
+    -- Save old weapon ammo
+    if oldWeapon and oldWeapon ~= "none" and self.exp_Clip then
+        self.exp_WeaponAmmoStorage[oldWeapon] = self.exp_Clip
+    end
+
+    -- FIX: Limit ammo storage to prevent memory leak (max 10 weapons)
+    local storageCount = table.Count(self.exp_WeaponAmmoStorage)
+    if storageCount > 10 then
+        -- Remove oldest entry (could be improved with LRU cache)
+        local toRemove = nil
+        for wepName, _ in pairs(self.exp_WeaponAmmoStorage) do
+            -- Remove weapon that's not current or old weapon
+            if wepName ~= weaponName and wepName ~= oldWeapon then
+                toRemove = wepName
+                break
+            end
+        end
+        if toRemove then
+            self.exp_WeaponAmmoStorage[toRemove] = nil
+        end
+    end
+
+    -- Restore ammo if we've used this weapon before
+    if self.exp_WeaponAmmoStorage[weaponName] then
+        self.exp_Clip = self.exp_WeaponAmmoStorage[weaponName]
+    else
+        self.exp_Clip = newData.clip or -1
+    end
+
     self.exp_MaxClip = newData.clip or -1
     self.exp_WeaponUseCooldown = CurTime() + ( newData.deploydelay or 0.1 )
     self.exp_WeaponDropEntity = newData.dropentity
@@ -133,9 +240,8 @@ function PLAYER:SwitchWeapon( weaponName, forceSwitch )
     -- Update weapon entity model
     wepEnt:SetModel( newData.model or "models/weapons/w_crowbar.mdl" )
 
-    -- Set position offsets (Lambda style)
-    wepEnt:SetLocalPos( newData.offpos or Vector( 0, 0, 0 ) )
-    wepEnt:SetLocalAngles( newData.offang or Angle( 0, 0, 0 ) )
+    -- FIX: Use centralized offset function for consistency
+    self:UpdateWeaponOffsets()
 
     -- Bonemerge control (Lambda style)
     if newData.bonemerge then
@@ -192,7 +298,11 @@ function PLAYER:Attack( target )
     if !self:CanAttack() then return false end
 
     local weaponData = EXP:GetWeaponData( self.exp_Weapon )
-    if !weaponData then return false end
+    if !weaponData then
+        -- FIX: Clear attack state when weapon data is invalid
+        self.exp_WeaponUseCooldown = CurTime() + 1  -- Prevent spam
+        return false
+    end
 
     local wepEnt = self:GetWeaponENT()
 
@@ -359,8 +469,9 @@ function PLAYER:AttackRanged( weaponData, wepEnt, target )
     -- Auto reload if empty
     if self.exp_Clip == 0 then
         local timerName = "EXP_AutoReload_" .. self:EntIndex()
+        local currentWeapon = weaponData.name  -- FIX: Capture weapon name to avoid race condition
         timer.Create( timerName, 0.5, 1, function()
-            if IsValid( self ) and self:Alive() and self.exp_Weapon == weaponData.name then
+            if IsValid( self ) and self:Alive() and self.exp_Weapon == currentWeapon then
                 self:Reload()
             end
         end )
