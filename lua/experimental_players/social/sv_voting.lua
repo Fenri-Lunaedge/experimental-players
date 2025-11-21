@@ -89,11 +89,13 @@ function EXP_CreateVote( ply, title, options )
 	hook.Run( "EXP_OnVoteDispatched", ply, title, options )
 
 	-- Set timer for vote completion (10 seconds)
-	if IsValid( _EXP_VoteTimer ) then
-		timer.Remove( _EXP_VoteTimer )
+	-- FIX: Timer names are strings, not entities - don't use IsValid()
+	local timerName = "EXP_VoteTimer"
+	if timer.Exists( timerName ) then
+		timer.Remove( timerName )
 	end
 
-	_EXP_VoteTimer = timer.Create( "EXP_VoteTimer", 10, 1, function()
+	timer.Create( timerName, 10, 1, function()
 		EXP_CompileVoteResults()
 	end )
 
@@ -175,8 +177,12 @@ function EXP_CompileVoteResults()
 	end
 
 	-- Handle ties
-	if #tiedOptions > 1 then
+	-- FIX: Only consider it a tie if there were actual votes
+	if #tiedOptions > 1 and winningVotes > 0 then
 		winningOption = tiedOptions[ math_random( #tiedOptions ) ]
+	elseif winningVotes == 0 then
+		-- No votes at all
+		winningOption = nil
 	end
 
 	-- Broadcast results
@@ -210,6 +216,16 @@ function EXP_CompileVoteResults()
 	_EXP_CurrentVote = "NIL"
 	_EXP_CurrentVotedOptions = {}
 	_EXP_VoteQuickIndex = {}
+
+	-- FIX: Clean up bot vote timers when vote ends
+	if _EXP_BotVoteTimers then
+		for _, timerName in ipairs( _EXP_BotVoteTimers ) do
+			if timer.Exists( timerName ) then
+				timer.Remove( timerName )
+			end
+		end
+		_EXP_BotVoteTimers = {}
+	end
 
 	print( "[Experimental Players] Vote ended. Winner: " .. ( winningOption or "None" ) )
 	return winningOption, winningVotes
@@ -285,7 +301,20 @@ end )
 hook.Add( "EXP_OnVoteDispatched", "EXP_BotVoting", function( initiator, title, options )
 	if !EXP.ActiveBots then return end
 
-	for _, bot in ipairs( EXP.ActiveBots ) do
+	-- FIX: Track bot vote timers to clean them up if vote ends early
+	if !_EXP_BotVoteTimers then
+		_EXP_BotVoteTimers = {}
+	end
+
+	-- Clear any existing bot vote timers
+	for _, timerName in ipairs( _EXP_BotVoteTimers ) do
+		if timer.Exists( timerName ) then
+			timer.Remove( timerName )
+		end
+	end
+	_EXP_BotVoteTimers = {}
+
+	for i, bot in ipairs( EXP.ActiveBots ) do
 		if !IsValid( bot._PLY ) then continue end
 
 		-- 33% chance to vote
@@ -293,7 +322,10 @@ hook.Add( "EXP_OnVoteDispatched", "EXP_BotVoting", function( initiator, title, o
 
 		-- Random delay before voting
 		local delay = math_random( 1, 8 )
-		timer.Simple( delay, function()
+		local timerName = "EXP_BotVote_" .. i .. "_" .. CurTime()
+		table.insert( _EXP_BotVoteTimers, timerName )
+
+		timer.Simple( delay, timerName, function()
 			if IsValid( bot._PLY ) and _EXP_CurrentVote  ~=  "NIL" then
 				-- Pick random option
 				local randomOption = options[ math_random( #options ) ]

@@ -324,7 +324,12 @@ function PLAYER:ThrowLightProp()
     local phys = prop:GetPhysicsObject()
 
     if IsValid(phys) then
-        phys:ApplyForceCenter(self:GetAimVector() * math.random(5000, 50000))
+        -- FIX: Reduced max throw force to reasonable values
+        -- Scale by mass - lighter props go further
+        local mass = phys:GetMass()
+        local baseForce = math.random(5000, 15000)  -- Max 15k instead of 50k
+        local force = baseForce * math.max(1, 35 / mass)  -- Scale inversely with mass
+        phys:ApplyForceCenter(self:GetAimVector() * force)
     end
 
     self:DropLightProp()
@@ -337,11 +342,18 @@ function PLAYER:CreateThinkFunction(name, delay, reps, func)
     local thinkName = "exp_think_" .. name .. "_" .. self:EntIndex()
 
     timer.Create(thinkName, delay, reps, function()
-        if !IsValid(self) then
+        -- FIX: Check IsValid before each execution, not just once
+        if !IsValid(self) or !self:Alive() then
             timer.Remove(thinkName)
             return
         end
-        func()
+
+        -- Wrapped function call with error protection
+        local success, err = pcall(func)
+        if !success then
+            print("[EXP] Think function '" .. name .. "' error: " .. tostring(err))
+            timer.Remove(thinkName)
+        end
     end)
 end
 
