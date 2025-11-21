@@ -113,14 +113,29 @@ function PLAYER:MoveToPos( pos, options )
 
         -- Check if stuck
         if self:IsStuck() then
-            -- Try to unstuck with more aggressive recovery
-            if self:AttemptUnstuck() then
-                -- Successfully unstuck, continue
-                self:ClearStuck()
+            -- FIX: Wait for unstuck action to complete before checking again
+            if self.exp_UnstuckActionEndTime and CurTime() < self.exp_UnstuckActionEndTime then
+                -- Still executing unstuck action, wait
+                coroutine_yield()
+                -- Continue to next iteration
             else
-                -- Can't unstuck, abort movement
-                pathResult = "stuck"
-                break
+                -- Unstuck action complete or not started, cleanup
+                if self.exp_UnstuckActionEndTime then
+                    -- Action completed, clear it
+                    self.exp_MoveCrouch = false
+                    self.exp_InputForwardMove = 0
+                    self.exp_UnstuckActionEndTime = nil
+                end
+
+                -- Try to unstuck with more aggressive recovery
+                if self:AttemptUnstuck() then
+                    -- Successfully started unstuck action, continue
+                    self:ClearStuck()
+                else
+                    -- Can't unstuck, abort movement
+                    pathResult = "stuck"
+                    break
+                end
             end
         end
 
@@ -247,6 +262,20 @@ end
 --[[ Input-based Movement ]]--
 
 function PLAYER:MoveTowards( pos )
+    -- FIX: Add timeout protection to prevent infinite loops
+    -- Initialize MoveTowards timer if not set
+    if !self.exp_MoveTowardsStartTime then
+        self.exp_MoveTowardsStartTime = CurTime()
+    end
+
+    -- Check if stuck in MoveTowards for too long (5 seconds)
+    if CurTime() - self.exp_MoveTowardsStartTime > 5 then
+        -- Clear and reset
+        self.exp_MoveTowardsStartTime = nil
+        self:StopMoving()
+        return false
+    end
+
     local myPos = self:GetPos()
     local myAng = self:EyeAngles()
 
@@ -285,6 +314,7 @@ function PLAYER:MoveTowards( pos )
     end
 
     -- Sprint and Crouch are now handled in SetupMove hook
+    return true
 end
 
 function PLAYER:StopMoving()
@@ -293,6 +323,7 @@ function PLAYER:StopMoving()
     self.exp_IsMoving = false
     self.exp_InputForwardMove = 0
     self.exp_InputSideMove = 0
+    self.exp_MoveTowardsStartTime = nil  -- FIX: Clear MoveTowards timer
 end
 
 function PLAYER:PressKey( key )
@@ -378,27 +409,25 @@ function PLAYER:AttemptUnstuck()
         return false
     end
 
+    -- FIX: Use time-based system instead of async timer
     -- Try different unstuck methods
     local method = self.exp_UnstuckAttempts
 
     if method == 1 then
         -- Method 1: Jump
         self:Jump()
+        self.exp_UnstuckActionEndTime = CurTime() + 0.2  -- Short delay for jump
     elseif method == 2 then
-        -- Method 2: Crouch and move backward
+        -- Method 2: Crouch and move backward (synchronous)
         self.exp_MoveCrouch = true
         self.exp_InputForwardMove = -10000
-        timer.Simple(0.5, function()
-            if IsValid(self) then
-                self.exp_MoveCrouch = false
-                self.exp_InputForwardMove = 0
-            end
-        end)
+        self.exp_UnstuckActionEndTime = CurTime() + 0.5  -- 0.5 seconds of backing up
     elseif method == 3 then
         -- Method 3: Recompute path
         if IsValid(self.Navigator) then
             self.Navigator:RecomputePath()
         end
+        self.exp_UnstuckActionEndTime = CurTime() + 0.1  -- Minimal delay
     end
 
     return true  -- Continue trying

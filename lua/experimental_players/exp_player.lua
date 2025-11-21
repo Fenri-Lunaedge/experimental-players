@@ -499,6 +499,20 @@ function PLAYER:State_Combat()
     local enemy = self.exp_Enemy
     local dist = self:GetPos():Distance( enemy:GetPos() )
 
+    -- FIX: If we can't see enemy but know their last position, pursue it
+    if !self:CanSeeEntity(enemy) and self.exp_LastKnownEnemyPos then
+        local lastKnownDist = self:GetPos():Distance(self.exp_LastKnownEnemyPos)
+
+        -- Only pursue if not too far (within 1500 units)
+        if lastKnownDist < 1500 then
+            if self.MoveTowards then
+                self:MoveTowards(self.exp_LastKnownEnemyPos)
+            end
+            CoroutineWait(self, 0.2)
+            return
+        end
+    end
+
     -- Get weapon data
     local weaponData = self:GetCurrentWeaponData()
     if !weaponData then

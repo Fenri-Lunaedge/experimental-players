@@ -21,9 +21,14 @@ function PLAYER:FindNearbyCovers(radius, fromPos)
     fromPos = fromPos or self:GetPos()
 
     -- FIX: Cache cover search to avoid expensive FindInSphere every frame
+    -- Also invalidate cache if bot moved too far
     local now = CurTime()
     if self.exp_CoverCacheTime and (now - self.exp_CoverCacheTime) < 2 then
-        return self.exp_CoverCache or {}
+        -- Also check distance from cache position
+        if self.exp_CoverCachePos and self:GetPos():Distance(self.exp_CoverCachePos) < 500 then
+            return self.exp_CoverCache or {}
+        end
+        -- Moved too far, invalidate cache
     end
 
     local covers = {}
@@ -51,9 +56,10 @@ function PLAYER:FindNearbyCovers(radius, fromPos)
         return a.quality > b.quality
     end)
 
-    -- Cache results
+    -- Cache results with position
     self.exp_CoverCache = covers
     self.exp_CoverCacheTime = now
+    self.exp_CoverCachePos = self:GetPos()
 
     return covers
 end
@@ -305,6 +311,7 @@ function PLAYER:InitializeCoverSystem()
     self.exp_LastDamageTime = nil
     self.exp_CoverCache = {}  -- FIX: Initialize cache
     self.exp_CoverCacheTime = 0
+    self.exp_CoverCachePos = Vector(0, 0, 0)  -- Cache position for distance check
 end
 
 -- Hook into damage to track when bot is under fire

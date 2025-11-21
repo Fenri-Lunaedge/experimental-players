@@ -13,6 +13,14 @@ local Vector = Vector
 
 local PLAYER = EXP.Player
 
+-- FIX: Protected states as constant to avoid recreation every frame
+local PROTECTED_STATES = {
+    ["Retreat"] = true,
+    ["AdminDuty"] = true,
+    ["UsingCommand"] = true,
+    ["Jailed"] = true
+}
+
 --[[ Combat Initialization ]]--
 
 function PLAYER:InitializeCombat()
@@ -492,17 +500,10 @@ function PLAYER:Think_Combat()
     -- Always update enemy detection
     self:UpdateEnemy()
 
-    -- FIX: Don't interrupt critical states with combat
-    local protectedStates = {
-        ["Retreat"] = true,
-        ["AdminDuty"] = true,
-        ["UsingCommand"] = true,
-        ["Jailed"] = true
-    }
-
     -- Switch to combat state if we have an enemy (unless in protected state)
     if IsValid(self.exp_Enemy) and self.exp_State  ~=  "Combat" then
-        if !protectedStates[self.exp_State] then
+        -- Use constant protected states table
+        if !PROTECTED_STATES[self.exp_State] then
             self:SetState("Combat")
         end
     end
@@ -577,7 +578,8 @@ hook.Add("EntityTakeDamage", "EXP_OnBotDamaged", function(target, dmg)
     end
 
     -- Play pain sound
-    if target.Voice_Panic and damage >= 50 then
+    -- FIX: Type check to ensure Voice_Panic is a function
+    if type(target.Voice_Panic) == "function" and damage >= 50 then
         -- Panic voice for heavy damage
         target:Voice_Panic()
     end

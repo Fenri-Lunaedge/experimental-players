@@ -85,6 +85,11 @@ function PLAYER:SwitchWeapon( weaponName, forceSwitch )
     -- Check if we can switch
     if !forceSwitch and self.exp_NoWeaponSwitch then return false end
 
+    -- FIX: Don't allow weapon switch during reload (unless forced)
+    if !forceSwitch and self.exp_IsReloading then
+        return false
+    end
+
     -- FIX: If switching to same weapon, preserve ammo
     if self.exp_Weapon == weaponName then
         return false  -- Already have it, don't reset
@@ -137,6 +142,23 @@ function PLAYER:SwitchWeapon( weaponName, forceSwitch )
     -- Save old weapon ammo
     if oldWeapon and oldWeapon ~= "none" and self.exp_Clip then
         self.exp_WeaponAmmoStorage[oldWeapon] = self.exp_Clip
+    end
+
+    -- FIX: Limit ammo storage to prevent memory leak (max 10 weapons)
+    local storageCount = table.Count(self.exp_WeaponAmmoStorage)
+    if storageCount > 10 then
+        -- Remove oldest entry (could be improved with LRU cache)
+        local toRemove = nil
+        for wepName, _ in pairs(self.exp_WeaponAmmoStorage) do
+            -- Remove weapon that's not current or old weapon
+            if wepName ~= weaponName and wepName ~= oldWeapon then
+                toRemove = wepName
+                break
+            end
+        end
+        if toRemove then
+            self.exp_WeaponAmmoStorage[toRemove] = nil
+        end
     end
 
     -- Restore ammo if we've used this weapon before
