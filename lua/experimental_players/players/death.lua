@@ -31,11 +31,12 @@ hook.Add("PlayerDeath", "EXP_OnPlayerDeath", function(victim, inflictor, attacke
     if !botWrapper then return end
 
     -- Call death voice/text
-    if victim.Voice_Death then
+    -- FIX: Type check to ensure these are functions
+    if type(victim.Voice_Death) == "function" then
         victim:Voice_Death()
     end
 
-    if victim.OnDeath then
+    if type(victim.OnDeath) == "function" then
         victim:OnDeath(attacker)
     end
 
@@ -169,6 +170,21 @@ function EXP:RespawnBot(ply)
         end)
     end
 
+    -- FIX: Recreate Navigator entity (was removed on death)
+    local navigator = ents.Create( "exp_navigator" )
+    if IsValid( navigator ) then
+        navigator:Spawn()
+        navigator:SetOwner( ply )
+        ply.Navigator = navigator
+    else
+        print("[EXP] ERROR: Failed to recreate Navigator for " .. ply:Nick())
+    end
+
+    -- FIX: Recreate WeaponEntity (was removed on death)
+    if ply.CreateWeaponEntity then
+        ply:CreateWeaponEntity()
+    end
+
     -- Reset movement
     if ply.InitializeMovement then
         ply:InitializeMovement()
@@ -184,10 +200,15 @@ function EXP:RespawnBot(ply)
 end
 
 function EXP:FindSpawnPosition()
-    -- Try to find player spawn points
-    local spawns = ents.FindByClass("info_player_*")
+    -- FIX: ents.FindByClass doesn't support wildcards, must search each type
+    local spawns = {}
 
-    -- Add other spawn types
+    -- Find all player spawn types manually
+    table.Add(spawns, ents.FindByClass("info_player_deathmatch"))
+    table.Add(spawns, ents.FindByClass("info_player_combine"))
+    table.Add(spawns, ents.FindByClass("info_player_rebel"))
+    table.Add(spawns, ents.FindByClass("info_player_counterterrorist"))
+    table.Add(spawns, ents.FindByClass("info_player_terrorist"))
     table.Add(spawns, ents.FindByClass("gmod_player_start"))
     table.Add(spawns, ents.FindByClass("info_player_start"))
 
@@ -243,27 +264,19 @@ end
 hook.Add("OnNPCKilled", "EXP_OnBotKillNPC", function(npc, attacker, inflictor)
     if !IsValid(attacker) or !attacker.exp_IsExperimentalPlayer then return end
 
-    -- Find GLACE wrapper
-    if EXP.ActiveBots then
-        for _, bot in ipairs(EXP.ActiveBots) do
-            if bot._PLY == attacker then
-                -- Call kill callbacks
-                if bot.Voice_Kill then
-                    bot:Voice_Kill()
-                end
+    -- Call kill callbacks on the player entity directly
+    -- FIX: Type check to ensure these are functions
+    if type(attacker.Voice_Kill) == "function" then
+        attacker:Voice_Kill()
+    end
 
-                if bot.OnKillEnemy then
-                    bot:OnKillEnemy(npc)
-                end
+    if type(attacker.OnKillEnemy) == "function" then
+        attacker:OnKillEnemy(npc)
+    end
 
-                -- Say kill message
-                if bot.SayText and math_random(1, 100) < 50 then
-                    bot:SayText(nil, "kill")
-                end
-
-                break
-            end
-        end
+    -- Say kill message
+    if type(attacker.SayText) == "function" and math_random(1, 100) < 50 then
+        attacker:SayText(nil, "kill")
     end
 end)
 
@@ -271,29 +284,19 @@ hook.Add("PlayerDeath", "EXP_OnBotKillPlayer", function(victim, inflictor, attac
     if !IsValid(attacker) or !attacker.exp_IsExperimentalPlayer then return end
     if victim == attacker then return end  -- Suicide
 
-    -- Find GLACE wrapper
-    if EXP.ActiveBots then
-        for _, bot in ipairs(EXP.ActiveBots) do
-            if bot._PLY == attacker then
-                -- Call kill callbacks on the player entity, not wrapper
-                local ply = bot._PLY
+    -- Call kill callbacks on the player entity directly
+    -- FIX: Type check to ensure these are functions
+    if type(attacker.Voice_Kill) == "function" then
+        attacker:Voice_Kill()
+    end
 
-                if ply.Voice_Kill then
-                    ply:Voice_Kill()
-                end
+    if type(attacker.OnKillEnemy) == "function" then
+        attacker:OnKillEnemy(victim)
+    end
 
-                if ply.OnKillEnemy then
-                    ply:OnKillEnemy(victim)
-                end
-
-                -- Say kill message
-                if ply.SayText and math_random(1, 100) < 50 then
-                    ply:SayText(nil, "kill")
-                end
-
-                break
-            end
-        end
+    -- Say kill message
+    if type(attacker.SayText) == "function" and math_random(1, 100) < 50 then
+        attacker:SayText(nil, "kill")
     end
 end)
 
@@ -306,18 +309,19 @@ hook.Add("PlayerDisconnected", "EXP_OnBotRemove", function(ply)
     if EXP.ActiveBots then
         for i, bot in ipairs(EXP.ActiveBots) do
             if bot._PLY == ply then
+                -- FIX: Access properties on player entity, not wrapper
                 -- Cleanup navigator
-                if IsValid(bot.Navigator) then
-                    bot.Navigator:Remove()
+                if IsValid(ply.Navigator) then
+                    ply.Navigator:Remove()
                 end
 
                 -- Cleanup weapon entity
-                if IsValid(bot.exp_WeaponEntity) then
-                    bot.exp_WeaponEntity:Remove()
+                if IsValid(ply.exp_WeaponEntity) then
+                    ply.exp_WeaponEntity:Remove()
                 end
 
-                -- Cleanup entities
-                if bot.CleanupEntities then
+                -- Cleanup entities (call on wrapper since it has the method)
+                if type(bot.CleanupEntities) == "function" then
                     bot:CleanupEntities()
                 end
 
